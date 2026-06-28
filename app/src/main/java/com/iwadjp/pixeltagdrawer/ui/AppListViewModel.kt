@@ -2,6 +2,7 @@ package com.iwadjp.pixeltagdrawer.ui
 
 import android.app.Application
 import android.util.Log
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.iwadjp.pixeltagdrawer.PerfLog
@@ -26,20 +27,26 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
     private val _uiState = MutableStateFlow(AppListUiState(isLoading = true))
     val uiState: StateFlow<AppListUiState> = _uiState.asStateFlow()
 
+    // refresh() の世代。icon 後追いロードが古い世代の結果を反映しないためのガード。
+    @Volatile
+    private var loadGeneration = 0
+
     init {
         PerfLog.log("AppListViewModel init")
         refresh()
     }
 
     fun refresh() {
+        val generation = ++loadGeneration
         _uiState.update { it.copy(isLoading = true, errorMessage = null) }
         viewModelScope.launch {
             try {
+                // まず icon なし (label のみ) で一覧を早く表示する。
                 val list = withContext(Dispatchers.IO) { repository.loadLaunchableApps() }
                 _uiState.update { it.copy(isLoading = false, apps = list, errorMessage = null) }
                 PerfLog.log("apps loaded into uiState count=${list.size}")
 
-                // DB同期は表示と独立。失敗しても一覧表示は壊さない (ログのみ)。
+                // DB同期は表示と独立。icon の有無で動作を変えない。失敗しても一覧表示は壊さない。
                 try {
                     PerfLog.log("db sync start")
                     withContext(Dispatchers.IO) { repository.syncLaunchableApps(list) }
@@ -47,11 +54,68 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
                 } catch (e: Exception) {
                     Log.w(TAG, "launcher_apps への同期に失敗しました", e)
                 }
+
+                // icon は初期表示後に後追いロードして該当アプリへ反映する。
+                loadIcons(list, generation)
             } catch (e: Exception) {
                 _uiState.update {
                     it.copy(isLoading = false, errorMessage = "アプリ一覧の読み込みに失敗しました")
                 }
             }
+        }
+    }
+
+    /**
+     * icon を非同期に後追いロードし、読み込めたアプリへ反映する。
+     * - 順序は維持 (list を map して該当アプリの icon だけ差し替える)。
+     * - refresh() が再実行されたら generation 不一致で中断し、古い結果を反映しない。
+     * - 再描画を抑えるため、数件たまったらまとめて反映する。
+     */
+    private fun loadIcons(apps: List<LauncherApp>, generation: Int) {
+        viewModelScope.launch {
+            PerfLog.log("icon lazy load start count=${apps.size}")
+            val pending = HashMap<String, ImageBitmap>()
+            var loaded = 0
+            var failed = 0
+            var firstLogged = false
+
+            fun flush() {
+                if (pending.isEmpty()) return
+                if (generation != loadGeneration) {
+                    pending.clear()
+                    return
+                }
+                val snapshot = HashMap(pending)
+                pending.clear()
+                _uiState.update { state ->
+                    state.copy(
+                        apps = state.apps.map { app ->
+                            val icon = snapshot["${app.packageName}/${app.className}"]
+                            if (icon != null && app.icon == null) app.copy(icon = icon) else app
+                        },
+                    )
+                }
+            }
+
+            for (app in apps) {
+                if (generation != loadGeneration) return@launch
+                val icon = withContext(Dispatchers.IO) {
+                    repository.loadIcon(app.packageName, app.className)
+                }
+                if (icon != null) {
+                    loaded++
+                    if (!firstLogged) {
+                        firstLogged = true
+                        PerfLog.log("icon lazy load first icon")
+                    }
+                    pending["${app.packageName}/${app.className}"] = icon
+                    if (pending.size >= ICON_FLUSH_BATCH) flush()
+                } else {
+                    failed++
+                }
+            }
+            flush()
+            PerfLog.log("icon lazy load end loaded=$loaded failed=$failed")
         }
     }
 
@@ -81,5 +145,7 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
 
     private companion object {
         const val TAG = "AppListViewModel"
+        // icon 後追いロードの反映バッチ件数 (再描画を抑える)。
+        const val ICON_FLUSH_BATCH = 12
     }
 }

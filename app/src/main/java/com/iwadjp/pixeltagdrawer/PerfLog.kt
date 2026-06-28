@@ -85,9 +85,10 @@ object PerfLog {
         }
         span("onCreate→firstList", "MainActivity.onCreate start", "first visible filtered list")
         span("PM query", "launchable apps query start", "launchable apps query end")
-        span("query→loaded(label+icon)", "launchable apps query end", "launchable apps loaded")
+        span("query→loaded(label only)", "launchable apps query end", "launchable apps loaded")
         span("loaded→uiState", "launchable apps loaded", "apps loaded into uiState")
         span("db sync", "db sync start", "db sync end")
+        span("icon lazy load", "icon lazy load start", "icon lazy load end")
         // ショートカット起動時のみ意味を持つ区間 (該当なければ n/a)
         span("[shortcut] applyLaunch→applied", "VM applyLaunch", "launch filter applied")
         span("[shortcut] applied→firstList", "launch filter applied", "first visible filtered list")

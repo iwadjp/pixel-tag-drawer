@@ -36,7 +36,7 @@ class AppRepository(private val context: Context) {
         PerfLog.log("launchable apps query start")
         val resolved = pm.queryIntentActivities(intent, 0)
         PerfLog.log("launchable apps query end raw=${resolved.size}")
-        // 各アプリの label と icon をこの map 内で同期ロードしている (調査用に区間を記録)。
+        // 初期表示を早めるため、ここでは label のみ読み icon は null。icon は loadIcon() で後追いする。
         val apps = resolved
             .mapNotNull { resolveInfo ->
                 val activityInfo = resolveInfo.activityInfo ?: return@mapNotNull null
@@ -44,12 +44,25 @@ class AppRepository(private val context: Context) {
                     label = resolveInfo.loadLabel(pm).toString(),
                     packageName = activityInfo.packageName,
                     className = activityInfo.name,
-                    icon = loadIconBitmap(resolveInfo.loadIcon(pm)),
+                    icon = null,
                 )
             }
             .sortedBy { it.label.lowercase() }
-        PerfLog.log("launchable apps loaded (label+icon) count=${apps.size}")
+        PerfLog.log("launchable apps loaded (label only) count=${apps.size}")
         return apps
+    }
+
+    /**
+     * 指定アクティビティ (packageName + className) のアイコンを後追いロードする。
+     * 初期表示後に非同期で呼ぶ想定。失敗時は null (クラッシュさせない)。
+     */
+    fun loadIcon(packageName: String, className: String): ImageBitmap? {
+        return try {
+            val pm = context.packageManager
+            loadIconBitmap(pm.getActivityIcon(ComponentName(packageName, className)))
+        } catch (e: Exception) {
+            null
+        }
     }
 
     /**
