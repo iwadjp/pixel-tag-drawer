@@ -39,6 +39,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilterChip
@@ -59,7 +60,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -220,6 +224,11 @@ fun AppListScreen(
     // ホーム画面ショートカット作成リクエストの結果メッセージ (タグ管理内に表示)。
     var shortcutMessage by remember { mutableStateOf<String?>(null) }
 
+    // 起動計測の診断ダイアログ (adb 不要で計測値を確認/コピーするため)。
+    val clipboard = LocalClipboardManager.current
+    var showDiagnostics by remember { mutableStateOf(false) }
+    var diagnosticsReport by remember { mutableStateOf("") }
+
     // 表示モード (リスト / アイコン)。前回値を復元し、変更時に保存する。
     var displayMode by remember {
         mutableStateOf(if (prefs.isGridMode) AppDisplayMode.Grid else AppDisplayMode.List)
@@ -292,6 +301,13 @@ fun AppListScreen(
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.weight(1f),
             )
+            // 起動計測の診断。通常/簡素表示のどちらでも参照できるよう常時表示する。
+            TextButton(onClick = {
+                diagnosticsReport = PerfLog.report()
+                showDiagnostics = true
+            }) {
+                Text("診断")
+            }
             // 簡素表示中は「編集」で従来UIへ。ショートカット起動時の通常UIには「一覧に戻る」を出す。
             if (simplifiedView) {
                 TextButton(onClick = { simplifiedView = false }) {
@@ -315,6 +331,16 @@ fun AppListScreen(
                     Text(if (showTagManagement) "閉じる" else "タグ管理")
                 }
             }
+        }
+
+        // 起動計測の診断ダイアログ。adb なしで計測値を確認・コピーできる。
+        if (showDiagnostics) {
+            DiagnosticsDialog(
+                report = diagnosticsReport,
+                onRefresh = { diagnosticsReport = PerfLog.report() },
+                onCopy = { clipboard.setText(AnnotatedString(diagnosticsReport)) },
+                onDismiss = { showDiagnostics = false },
+            )
         }
 
         // タグ管理UIは開いているときだけ表示。ショートカット簡素表示中は隠す。
@@ -812,6 +838,62 @@ private fun TagFilterSection(
             }
         }
     }
+}
+
+@Composable
+private fun DiagnosticsDialog(
+    report: String,
+    onRefresh: () -> Unit,
+    onCopy: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var copied by remember { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("起動計測 診断") },
+        text = {
+            Column(
+                modifier = Modifier
+                    .heightIn(max = 420.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = report.ifEmpty { "(計測データなし)" },
+                    style = MaterialTheme.typography.labelSmall,
+                    fontFamily = FontFamily.Monospace,
+                )
+                if (copied) {
+                    Text(
+                        text = "診断情報をコピーしました",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                onCopy()
+                copied = true
+            }) {
+                Text("コピー")
+            }
+        },
+        dismissButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = {
+                    onRefresh()
+                    copied = false
+                }) {
+                    Text("更新")
+                }
+                TextButton(onClick = onDismiss) {
+                    Text("閉じる")
+                }
+            }
+        },
+    )
 }
 
 /** アプリ一覧の表示モード。 */
