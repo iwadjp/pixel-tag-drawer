@@ -1,6 +1,7 @@
 package com.iwadjp.pixeltagdrawer.ui
 
 import android.app.Application
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.iwadjp.pixeltagdrawer.data.AppRepository
@@ -34,6 +35,13 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
             try {
                 val list = withContext(Dispatchers.IO) { repository.loadLaunchableApps() }
                 _uiState.update { it.copy(isLoading = false, apps = list, errorMessage = null) }
+
+                // DB同期は表示と独立。失敗しても一覧表示は壊さない (ログのみ)。
+                try {
+                    withContext(Dispatchers.IO) { repository.syncLaunchableApps(list) }
+                } catch (e: Exception) {
+                    Log.w(TAG, "launcher_apps への同期に失敗しました", e)
+                }
             } catch (e: Exception) {
                 _uiState.update {
                     it.copy(isLoading = false, errorMessage = "アプリ一覧の読み込みに失敗しました")
@@ -64,5 +72,9 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
 
     fun clearMessage() {
         _uiState.update { it.copy(errorMessage = null) }
+    }
+
+    private companion object {
+        const val TAG = "AppListViewModel"
     }
 }

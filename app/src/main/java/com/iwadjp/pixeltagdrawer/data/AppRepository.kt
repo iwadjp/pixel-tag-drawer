@@ -9,6 +9,8 @@ import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import com.iwadjp.pixeltagdrawer.data.db.LauncherAppEntity
+import com.iwadjp.pixeltagdrawer.data.db.PixelTagDrawerDatabase
 import com.iwadjp.pixeltagdrawer.model.LauncherApp
 
 /**
@@ -16,6 +18,10 @@ import com.iwadjp.pixeltagdrawer.model.LauncherApp
  * v0.1ではPackageManagerの読み取りのみ。後続でRoom/タグ管理に拡張しやすいよう分離している。
  */
 class AppRepository(private val context: Context) {
+
+    private val launcherAppDao by lazy {
+        PixelTagDrawerDatabase.getInstance(context).launcherAppDao()
+    }
 
     /**
      * Intent.ACTION_MAIN + CATEGORY_LAUNCHER で解決できる起動可能Activityを列挙する。
@@ -61,6 +67,25 @@ class AppRepository(private val context: Context) {
         } catch (e: Exception) {
             null
         }
+    }
+
+    /**
+     * 取得した起動可能アプリ一覧を launcher_apps テーブルへ同期 (upsert) する。
+     * 取得できたものは isInstalled=true、lastSeenAt=同期時刻で保存する。
+     * 消えたアプリを false にする処理は後続。表示とは独立で、呼び出し側で失敗を握る。
+     */
+    suspend fun syncLaunchableApps(apps: List<LauncherApp>) {
+        val now = System.currentTimeMillis()
+        val entities = apps.map { app ->
+            LauncherAppEntity(
+                packageName = app.packageName,
+                className = app.className,
+                label = app.label,
+                isInstalled = true,
+                lastSeenAt = now,
+            )
+        }
+        launcherAppDao.upsertAll(entities)
     }
 
     /**
