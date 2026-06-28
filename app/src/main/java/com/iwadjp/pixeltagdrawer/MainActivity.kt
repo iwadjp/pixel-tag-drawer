@@ -68,128 +68,121 @@ fun AppListScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val tagState by tagViewModel.uiState.collectAsStateWithLifecycle()
 
-    LazyColumn(
+    // 操作エリア (タイトル/タグ/検索/件数) は固定し、アプリ一覧だけをスクロールさせる。
+    // そのため全体は Column、一覧部分のみ weight(1f) を持つ LazyColumn にする。
+    Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = 24.dp),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 24.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        item {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    text = "Pixel Tag Drawer",
-                    style = MaterialTheme.typography.headlineMedium,
-                )
-                Text(
-                    text = "Pixel Launcherを置き換えない、タグ付き補助ランチャーです。" +
-                        "以下は起動可能アプリ一覧。タップで起動します。",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-            }
-        }
-
-        item {
-            TagSection(
-                state = tagState,
-                onNameChange = tagViewModel::updateTagName,
-                onCreate = tagViewModel::createTag,
-                onDelete = tagViewModel::deleteTag,
+        Column(
+            modifier = Modifier.padding(top = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = "Pixel Tag Drawer",
+                style = MaterialTheme.typography.headlineMedium,
+            )
+            Text(
+                text = "Pixel Launcherを置き換えない、タグ付き補助ランチャーです。" +
+                    "以下は起動可能アプリ一覧。タップで起動します。",
+                style = MaterialTheme.typography.bodyMedium,
             )
         }
 
+        TagSection(
+            state = tagState,
+            onNameChange = tagViewModel::updateTagName,
+            onCreate = tagViewModel::createTag,
+            onDelete = tagViewModel::deleteTag,
+        )
+
         // アプリが選択されているときだけ、タグ割り当てパネルを表示する
         if (tagState.selectedApp != null) {
-            item {
-                SelectedAppTagPanel(
-                    state = tagState,
-                    onToggle = tagViewModel::setTagForSelectedApp,
-                    onClose = tagViewModel::clearSelectedApp,
-                )
-            }
+            SelectedAppTagPanel(
+                state = tagState,
+                onToggle = tagViewModel::setTagForSelectedApp,
+                onClose = tagViewModel::clearSelectedApp,
+            )
         }
 
         uiState.errorMessage?.let { msg ->
-            item {
-                // 目立ちすぎないよう小さめのテキストで表示する
-                Text(
-                    text = msg,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.padding(top = 8.dp),
-                )
-            }
+            // 目立ちすぎないよう小さめのテキストで表示する
+            Text(
+                text = msg,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(top = 8.dp),
+            )
         }
 
         // 検索欄はアプリが読み込まれているときだけ表示する
         if (uiState.apps.isNotEmpty()) {
-            item {
-                OutlinedTextField(
-                    value = uiState.query,
-                    onValueChange = viewModel::updateQuery,
-                    singleLine = true,
-                    label = { Text("アプリ名 / パッケージ名で検索") },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 8.dp),
-                )
-            }
+            OutlinedTextField(
+                value = uiState.query,
+                onValueChange = viewModel::updateQuery,
+                singleLine = true,
+                label = { Text("アプリ名 / パッケージ名で検索") },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp),
+            )
         }
 
         val filteredApps = uiState.filteredApps
         when {
             uiState.isLoading && uiState.apps.isEmpty() -> {
-                item {
-                    Text(
-                        text = "アプリ一覧を読み込んでいます...",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 16.dp),
-                    )
-                }
+                Text(
+                    text = "アプリ一覧を読み込んでいます...",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 16.dp),
+                )
             }
 
             uiState.apps.isEmpty() -> {
-                item {
-                    Text(
-                        text = "起動可能なアプリが見つかりませんでした",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 16.dp),
-                    )
-                }
+                Text(
+                    text = "起動可能なアプリが見つかりませんでした",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 16.dp),
+                )
             }
 
             filteredApps.isEmpty() -> {
-                item {
-                    Text(
-                        text = "一致するアプリがありません",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 16.dp),
-                    )
-                }
+                Text(
+                    text = "一致するアプリがありません",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 16.dp),
+                )
             }
 
             else -> {
-                item {
-                    Text(
-                        text = "${filteredApps.size} 件",
-                        style = MaterialTheme.typography.labelMedium,
-                        modifier = Modifier.padding(top = 8.dp, bottom = 4.dp),
-                    )
-                }
+                // 件数は固定エリアに残し、一覧 (LazyColumn) だけをスクロールさせる
+                Text(
+                    text = "${filteredApps.size} 件",
+                    style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.padding(top = 8.dp, bottom = 4.dp),
+                )
 
-                items(
-                    items = filteredApps,
-                    key = { "${it.packageName}/${it.className}" },
-                ) { app ->
-                    AppRow(
-                        app = app,
-                        onClick = { viewModel.launch(app) },
-                        onTag = { tagViewModel.selectAppForTagging(app) },
-                    )
-                    HorizontalDivider()
+                LazyColumn(
+                    modifier = Modifier.weight(1f),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 24.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    items(
+                        items = filteredApps,
+                        key = { "${it.packageName}/${it.className}" },
+                    ) { app ->
+                        AppRow(
+                            app = app,
+                            onClick = { viewModel.launch(app) },
+                            onTag = { tagViewModel.selectAppForTagging(app) },
+                        )
+                        HorizontalDivider()
+                    }
                 }
             }
         }
