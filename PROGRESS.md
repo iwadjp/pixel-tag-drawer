@@ -1120,3 +1120,54 @@ Pixel Launcher 補助ランチャーとしての運用導線が大きく改善�
 - 「一覧に戻る」の showTagManagement 副作用回避
 - 診断UIの DEBUG ガード化
 - dogfooding継続
+
+---
+
+## 2026-06-29 アイコン遅延ロード後の初期表示速度計測 (改善前後比較)
+
+- **対象コミット**: `93f37b8 Load app icons asynchronously` (改善)
+- **比較元**: `24a9972 Record performance diagnostics and improve trace output` (改善前)
+- **対象端末**: Google Pixel 10a
+- **配布/確認方法**: SafeDrop APK List 経由でインストール → アプリ内「診断」から `report()` をコピー (adb/logcat 不使用)
+- **透明性**: 計測値は**利用者が Pixel 10a 上で取得した report()** に基づく。agent (Claude Code) 環境には Pixel 10a 実機も adb も無く、**agent 自身は実機計測を行っていない**。
+
+### 改善前後の比較 (onCreate→firstList)
+
+| 起動パターン | 改善前 (24a9972) | 改善後 (93f37b8) |
+|---|---|---|
+| 通常起動 | 1817ms | **1474ms** |
+| タグ別ショートカット | 2225ms | **738ms** |
+| タグなしショートカット | 1676ms | **408ms** |
+
+- applied→firstList (ショートカット): タグ別 約1993〜2178ms → **529ms**、タグなし 1471ms → **188ms**。
+
+### 改善後の主要区間
+
+| 区間 | 通常起動 | タグ別ショートカット | タグなしショートカット |
+|---|---|---|---|
+| onCreate→firstList | 1474ms | 738ms | 408ms |
+| PM query | 14ms | 17ms | 20ms |
+| query→loaded(label only) | 1075ms | 395ms | 185ms |
+| loaded→uiState | 1ms | 0ms | 0ms |
+| db sync | 233ms | 186ms | 84ms |
+| icon lazy load | n/a (※コピー時点で end 未記録) | 1699ms | 1026ms |
+| applyLaunch→applied | - | 0ms | 1ms |
+| applied→firstList | - | 529ms | 188ms |
+
+- icon lazy load の結果: タグ別/タグなしとも `loaded=186 failed=0`。
+- 通常起動の備考: icon lazy load start +1443ms、first visible (count=186) +1474ms、first icon +1482ms、icon lazy load end はコピー時点で未記録。
+
+### 判断
+
+- アイコン遅延ロードは、特に**ショートカット起動で明確に効果あり** (タグ別 2225→738ms、タグなし 1676→408ms)。`applied→firstList` も大幅短縮 (タグ別 ~2000→529ms、タグなし 1471→188ms)。
+- 「一覧を先に出し、icon を後から埋める」設計は成立。icon lazy load は後段で動作し loaded=186 failed=0。
+- 通常起動は 1817→1474ms と改善が小さめ。`query→loaded(label only)` が 1075ms 残り、**label 取得自体のコスト or 端末状態の揺れ**が残っている可能性。
+- B-2 は、ショートカット起動導線については成功寄り。通常起動はまだ改善余地あり。
+- 追加最適化候補 (今回は実装せず、まず dogfooding で体感確認): label キャッシュ / DB先行表示、表示対象優先の icon load、icon バッチ数調整。
+
+### 次候補
+
+- dogfooding で体感確認 (まず追加実装しない)
+- 通常起動の label 取得コスト調査 (label キャッシュ / DB先行表示)
+- 表示対象優先の icon load
+- icon バッチ数調整
