@@ -17,6 +17,8 @@ data class TagUiState(
     val selectedAppTagIds: Set<Long> = emptySet(),
     // 一覧絞り込みに選択中の tagId 集合 (空ならタグ条件で絞らない)
     val selectedFilterTagIds: Set<Long> = emptySet(),
+    // 「タグなし」(未付与アプリのみ) で絞り込むか。通常タグ選択とは排他。
+    val showUntaggedOnly: Boolean = false,
     // 各アプリ ("packageName/className") に付与済みの tagId 集合。一覧絞り込み用。
     val appTagMap: Map<String, Set<Long>> = emptyMap(),
     // 名前変更中のタグ (未編集時は null)

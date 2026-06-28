@@ -26,7 +26,12 @@ class TagViewModel(application: Application) : AndroidViewModel(application) {
     private val prefs = AppPreferences(application)
 
     // 前回の絞り込み選択を復元する。削除済みIDは observeTags の intersect で除外される。
-    private val _uiState = MutableStateFlow(TagUiState(selectedFilterTagIds = prefs.loadFilterTagIds()))
+    private val _uiState = MutableStateFlow(
+        TagUiState(
+            selectedFilterTagIds = prefs.loadFilterTagIds(),
+            showUntaggedOnly = prefs.showUntaggedOnly,
+        ),
+    )
     val uiState: StateFlow<TagUiState> = _uiState.asStateFlow()
 
     // 選択中アプリの付与済みタグID購読。選択切替時に張り替える。
@@ -221,20 +226,45 @@ class TagViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** 一覧絞り込みタグのON/OFFを切り替える。複数選択時はAND条件で扱う。 */
+    /**
+     * 一覧絞り込みタグのON/OFFを切り替える。複数選択時はAND条件で扱う。
+     * 通常タグを選ぶと「タグなし」絞り込みは排他で OFF にする。
+     */
     fun toggleFilterTag(tagId: Long) {
         _uiState.update {
             val next = it.selectedFilterTagIds.toMutableSet()
             if (!next.add(tagId)) next.remove(tagId)
-            it.copy(selectedFilterTagIds = next)
+            it.copy(selectedFilterTagIds = next, showUntaggedOnly = false)
         }
         prefs.saveFilterTagIds(_uiState.value.selectedFilterTagIds)
+        prefs.showUntaggedOnly = false
     }
 
-    /** 一覧絞り込みタグの選択をすべて解除する。 */
+    /** 一覧絞り込み (通常タグ・タグなし) をすべて解除する。 */
     fun clearFilterTags() {
-        _uiState.update { it.copy(selectedFilterTagIds = emptySet()) }
+        _uiState.update { it.copy(selectedFilterTagIds = emptySet(), showUntaggedOnly = false) }
         prefs.saveFilterTagIds(emptySet())
+        prefs.showUntaggedOnly = false
+    }
+
+    /** 「タグなし」絞り込みのON/OFFを切り替える。 */
+    fun toggleUntaggedFilter() {
+        setUntaggedFilter(!_uiState.value.showUntaggedOnly)
+    }
+
+    /**
+     * 「タグなし」絞り込みを設定する。
+     * ON にすると通常タグ選択は排他でクリアする。
+     */
+    fun setUntaggedFilter(enabled: Boolean) {
+        _uiState.update {
+            it.copy(
+                showUntaggedOnly = enabled,
+                selectedFilterTagIds = if (enabled) emptySet() else it.selectedFilterTagIds,
+            )
+        }
+        prefs.showUntaggedOnly = enabled
+        if (enabled) prefs.saveFilterTagIds(emptySet())
     }
 
     /** タグの名前変更を開始する。既存名を入力欄に入れる。 */

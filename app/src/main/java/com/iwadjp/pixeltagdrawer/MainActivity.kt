@@ -8,12 +8,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
@@ -156,16 +158,8 @@ fun AppListScreen(
             )
         }
 
-        // 個別タグ編集パネルは、一括選択が無いときだけ表示して過密・競合を避ける
-        if (tagState.selectedApp != null && selectedBulkApps.isEmpty()) {
-            SelectedAppTagPanel(
-                state = tagState,
-                onToggle = tagViewModel::setTagForSelectedApp,
-                onClose = tagViewModel::clearSelectedApp,
-                onUndo = tagViewModel::undoLastTagEdit,
-                onRedo = tagViewModel::redoLastTagEdit,
-            )
-        }
+        // 個別タグ編集パネルは廃止し、タグ付けは「タグ編集→選択→一括バー」に一本化する。
+        // (TagViewModel 側の個別付与/解除・Undo/Redo 実装は将来再利用のため残置)
 
         uiState.errorMessage?.let { msg ->
             // 目立ちすぎないよう小さめのテキストで表示する
@@ -206,21 +200,25 @@ fun AppListScreen(
                 state = tagState,
                 onToggle = tagViewModel::toggleFilterTag,
                 onClear = tagViewModel::clearFilterTags,
+                onToggleUntagged = tagViewModel::toggleUntaggedFilter,
             )
         }
 
-        // 検索 (名前/パッケージ) で絞った結果に、選択タグ条件をANDで合成する。
-        // タグ未選択時は検索結果そのまま。複数選択時は全タグを持つアプリのみ。
+        // 検索 (名前/パッケージ) で絞った結果に、タグ条件をANDで合成する。
+        // 「タグなし」は未付与アプリのみ。通常タグ選択時は全タグを持つアプリのみ。両者は排他。
         val filteredApps = remember(
             uiState.filteredApps,
             tagState.selectedFilterTagIds,
+            tagState.showUntaggedOnly,
             tagState.appTagMap,
         ) {
             val selected = tagState.selectedFilterTagIds
-            if (selected.isEmpty()) {
-                uiState.filteredApps
-            } else {
-                uiState.filteredApps.filter { app ->
+            when {
+                tagState.showUntaggedOnly -> uiState.filteredApps.filter { app ->
+                    tagState.appTagMap["${app.packageName}/${app.className}"].isNullOrEmpty()
+                }
+                selected.isEmpty() -> uiState.filteredApps
+                else -> uiState.filteredApps.filter { app ->
                     val appTags = tagState.appTagMap["${app.packageName}/${app.className}"]
                         ?: emptySet()
                     appTags.containsAll(selected)
@@ -356,24 +354,20 @@ fun AppListScreen(
                                 AppRow(
                                     app = app,
                                     tagNames = tagNames,
-                                    showTagButton = tagEditMode,
+                                    // 個別「タグ」ボタンは廃止 (タグ付けは一括バーへ一本化)
+                                    showTagButton = false,
                                     selectionMode = tagEditMode,
                                     selected = selectedBulkApps.contains(key),
-                                    // 編集ON時はタップで一括選択トグル(個別パネルは閉じる)、通常時は起動
+                                    // 編集ON時はタップで一括選択トグル、通常時は起動
                                     onClick = {
                                         if (tagEditMode) {
                                             selectedBulkApps = selectedBulkApps.toMutableSet()
                                                 .apply { if (!add(key)) remove(key) }
-                                            tagViewModel.clearSelectedApp()
                                         } else {
                                             viewModel.launch(app)
                                         }
                                     },
-                                    // 個別編集を開くときは一括選択を解除して競合を避ける
-                                    onTag = {
-                                        selectedBulkApps = emptySet()
-                                        tagViewModel.selectAppForTagging(app)
-                                    },
+                                    onTag = {},
                                 )
                                 HorizontalDivider()
                             }
@@ -395,21 +389,18 @@ fun AppListScreen(
                                 val key = "${app.packageName}/${app.className}"
                                 AppGridCell(
                                     app = app,
-                                    showTagButton = tagEditMode,
+                                    // 個別「タグ」ボタンは廃止 (タグ付けは一括バーへ一本化)
+                                    showTagButton = false,
                                     selected = tagEditMode && selectedBulkApps.contains(key),
                                     onClick = {
                                         if (tagEditMode) {
                                             selectedBulkApps = selectedBulkApps.toMutableSet()
                                                 .apply { if (!add(key)) remove(key) }
-                                            tagViewModel.clearSelectedApp()
                                         } else {
                                             viewModel.launch(app)
                                         }
                                     },
-                                    onTag = {
-                                        selectedBulkApps = emptySet()
-                                        tagViewModel.selectAppForTagging(app)
-                                    },
+                                    onTag = {},
                                 )
                             }
                         }
@@ -471,6 +462,14 @@ private fun TagSection(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         } else {
+            // タグが多くても全タグへ到達できるよう、一覧部だけ高さ上限付きで縦スクロールにする。
+            // タグ管理を開いている時は広めに使ってよい (常用時は閉じている)。
+            Column(
+                modifier = Modifier
+                    .heightIn(max = 360.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
             state.tags.forEach { tag ->
                 if (state.editingTag?.tagId == tag.tagId) {
                     // 編集中: 名前入力欄 + 保存 / キャンセル
@@ -514,6 +513,7 @@ private fun TagSection(
                     }
                 }
             }
+            }
         }
         HorizontalDivider(modifier = Modifier.padding(top = 8.dp))
     }
@@ -524,6 +524,7 @@ private fun TagFilterSection(
     state: com.iwadjp.pixeltagdrawer.ui.TagUiState,
     onToggle: (Long) -> Unit,
     onClear: () -> Unit,
+    onToggleUntagged: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -541,8 +542,8 @@ private fun TagFilterSection(
                 style = MaterialTheme.typography.titleSmall,
                 modifier = Modifier.weight(1f),
             )
-            // 選択中があるときだけ、まとめて解除できるようにする
-            if (state.selectedFilterTagIds.isNotEmpty()) {
+            // いずれかの絞り込みが効いている時だけ、まとめて解除できるようにする
+            if (state.selectedFilterTagIds.isNotEmpty() || state.showUntaggedOnly) {
                 TextButton(onClick = onClear) {
                     Text("解除")
                 }
@@ -555,6 +556,12 @@ private fun TagFilterSection(
                 .horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            // 先頭に「タグなし」(未付与アプリのみ)。通常タグとは排他
+            FilterChip(
+                selected = state.showUntaggedOnly,
+                onClick = onToggleUntagged,
+                label = { Text("タグなし") },
+            )
             state.tags.forEach { tag ->
                 FilterChip(
                     selected = state.selectedFilterTagIds.contains(tag.tagId),
