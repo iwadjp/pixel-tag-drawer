@@ -15,6 +15,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -89,6 +92,10 @@ fun AppListScreen(
 
     // タグ編集モード。ON のときだけアプリ行/セルに「タグ」ボタンを出す。永続化なし。
     var tagEditMode by remember { mutableStateOf(false) }
+
+    // 一覧の最終要素がナビゲーションバーに隠れないよう、その分を一覧下端の余白に加える。
+    // 固定エリアには付けず、スクロール領域 (List/Grid) の contentPadding だけに効かせる。
+    val navBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
     // 操作エリア (タイトル/タグ/検索/件数) は固定し、アプリ一覧だけをスクロールさせる。
     // そのため全体は Column、一覧部分のみ weight(1f) を持つ LazyColumn にする。
@@ -282,7 +289,7 @@ fun AppListScreen(
                     AppDisplayMode.List -> {
                         LazyColumn(
                             modifier = Modifier.weight(1f),
-                            contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 24.dp),
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = navBarPadding + 24.dp),
                             verticalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
                             items(
@@ -310,7 +317,7 @@ fun AppListScreen(
                         LazyVerticalGrid(
                             columns = GridCells.Fixed(4),
                             modifier = Modifier.weight(1f),
-                            contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 24.dp),
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = navBarPadding + 24.dp),
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
