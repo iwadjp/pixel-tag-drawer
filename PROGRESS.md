@@ -92,3 +92,34 @@ Pixel Launcher 補助ランチャーとして、アプリ数が多い場合の�
 ### 次候補
 
 - Room / タグDB
+
+---
+
+## 2026-06-28 Room DB 同期の実機確認
+
+- **対象コミット**: `9c31c67 Sync launchable apps to database`
+- **対象端末**: Google Pixel 10a
+- **配布方法**: SafeDrop APK List 経由で debug APK を配布
+- **対象機能**: 起動可能アプリ一覧の Room DB 同期 (launcher_apps への upsert)
+- **結果**: test ok
+
+### 確認項目
+
+- [x] APK更新インストール
+- [x] アプリ起動
+- [x] 起動可能アプリ一覧表示
+- [x] アプリアイコン表示
+- [x] アプリ名 / packageName 検索
+- [x] 一覧からのタップ起動
+- [x] DB同期追加後もクラッシュなし
+
+### 判断
+
+Room DB 土台が実際に動作する段階に進んだ。
+既存UIを壊さず、launcher_apps への同期を追加できた。
+次は TagRepository または最小タグ作成UIに進める。
+
+### 次候補
+
+- TagRepository (TagDao / AppTagDao を束ねる)
+- 最小タグ作成UI
