@@ -77,7 +77,10 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        PerfLog.start()
+        PerfLog.log("MainActivity.onCreate start")
         launchFilter.value = parseLaunchFilter(intent)
+        PerfLog.log("setContent start (launchFilter=${launchFilter.value})")
         setContent {
             PixelTagDrawerApp(launchFilter = launchFilter.value)
         }
@@ -250,6 +253,7 @@ fun AppListScreen(
         }
         launchedViaShortcut = launchFilter != null
         simplifiedView = launchFilter != null
+        PerfLog.log("launch filter applied (filter=$launchFilter, simplified=$simplifiedView)")
         if (launchFilter != null) {
             // ショートカット起動時は検索 + 絞り込み一覧中心にし、編集系の残留状態をクリア
             tagEditMode = false
@@ -416,6 +420,15 @@ fun AppListScreen(
         // tagId -> タグ名。アプリ行に付与済みタグ名を表示するために使う。
         val tagNameById = remember(tagState.tags) {
             tagState.tags.associate { it.tagId to it.name }
+        }
+
+        // 調査用: 絞り込み済み一覧が初めて非空になった時刻を1回だけ計測する。
+        val perfFirstListLogged = remember { mutableStateOf(false) }
+        LaunchedEffect(filteredApps) {
+            if (!perfFirstListLogged.value && filteredApps.isNotEmpty()) {
+                perfFirstListLogged.value = true
+                PerfLog.log("first visible filtered list count=${filteredApps.size}")
+            }
         }
 
         when {

@@ -4,6 +4,7 @@ import android.app.Application
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.iwadjp.pixeltagdrawer.PerfLog
 import com.iwadjp.pixeltagdrawer.data.AppRepository
 import com.iwadjp.pixeltagdrawer.model.LauncherApp
 import kotlinx.coroutines.Dispatchers
@@ -26,6 +27,7 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
     val uiState: StateFlow<AppListUiState> = _uiState.asStateFlow()
 
     init {
+        PerfLog.log("AppListViewModel init")
         refresh()
     }
 
@@ -35,10 +37,13 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
             try {
                 val list = withContext(Dispatchers.IO) { repository.loadLaunchableApps() }
                 _uiState.update { it.copy(isLoading = false, apps = list, errorMessage = null) }
+                PerfLog.log("apps loaded into uiState count=${list.size}")
 
                 // DB同期は表示と独立。失敗しても一覧表示は壊さない (ログのみ)。
                 try {
+                    PerfLog.log("db sync start")
                     withContext(Dispatchers.IO) { repository.syncLaunchableApps(list) }
+                    PerfLog.log("db sync end")
                 } catch (e: Exception) {
                     Log.w(TAG, "launcher_apps への同期に失敗しました", e)
                 }

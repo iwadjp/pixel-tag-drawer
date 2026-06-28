@@ -4,6 +4,7 @@ import android.app.Application
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.iwadjp.pixeltagdrawer.PerfLog
 import com.iwadjp.pixeltagdrawer.data.AppPreferences
 import com.iwadjp.pixeltagdrawer.data.TagRepository
 import com.iwadjp.pixeltagdrawer.data.db.TagEntity
@@ -53,8 +54,15 @@ class TagViewModel(application: Application) : AndroidViewModel(application) {
     private val redoStack = ArrayDeque<TagEditAction>()
 
     init {
+        PerfLog.log("TagViewModel init")
+        var tagsFirst = true
+        var appTagsFirst = true
         viewModelScope.launch {
             repository.observeTags().collect { tags ->
+                if (tagsFirst) {
+                    tagsFirst = false
+                    PerfLog.log("tags first emission count=${tags.size}")
+                }
                 // タグが削除されても絞り込み選択が宙に浮かないよう、存在するIDだけ残す
                 val validIds = tags.mapTo(mutableSetOf()) { it.tagId }
                 _uiState.update {
@@ -67,6 +75,10 @@ class TagViewModel(application: Application) : AndroidViewModel(application) {
         }
         viewModelScope.launch {
             repository.observeAllAppTags().collect { refs ->
+                if (appTagsFirst) {
+                    appTagsFirst = false
+                    PerfLog.log("app-tag map first emission rows=${refs.size}")
+                }
                 // "packageName/className" -> 付与済み tagId 集合
                 val map = refs
                     .groupBy({ "${it.packageName}/${it.className}" }, { it.tagId })
@@ -310,6 +322,7 @@ class TagViewModel(application: Application) : AndroidViewModel(application) {
      * 存在しない tagId は observeTags の intersect で除外され、フィルタなしに戻る (クラッシュしない)。
      */
     fun applyLaunchFilterTag(tagId: Long) {
+        PerfLog.log("VM applyLaunchFilterTag tagId=$tagId")
         _uiState.update { it.copy(selectedFilterTagIds = setOf(tagId), showUntaggedOnly = false) }
         prefs.saveFilterTagIds(setOf(tagId))
         prefs.showUntaggedOnly = false
@@ -317,6 +330,7 @@ class TagViewModel(application: Application) : AndroidViewModel(application) {
 
     /** 起動Intent指定で「タグなし」絞り込みを適用する。 */
     fun applyLaunchUntaggedFilter() {
+        PerfLog.log("VM applyLaunchUntaggedFilter")
         setUntaggedFilter(true)
     }
 

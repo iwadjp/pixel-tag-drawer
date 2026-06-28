@@ -9,6 +9,7 @@ import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import com.iwadjp.pixeltagdrawer.PerfLog
 import com.iwadjp.pixeltagdrawer.data.db.LauncherAppEntity
 import com.iwadjp.pixeltagdrawer.data.db.PixelTagDrawerDatabase
 import com.iwadjp.pixeltagdrawer.model.LauncherApp
@@ -32,7 +33,11 @@ class AppRepository(private val context: Context) {
         val intent = Intent(Intent.ACTION_MAIN, null).apply {
             addCategory(Intent.CATEGORY_LAUNCHER)
         }
-        return pm.queryIntentActivities(intent, 0)
+        PerfLog.log("launchable apps query start")
+        val resolved = pm.queryIntentActivities(intent, 0)
+        PerfLog.log("launchable apps query end raw=${resolved.size}")
+        // 各アプリの label と icon をこの map 内で同期ロードしている (調査用に区間を記録)。
+        val apps = resolved
             .mapNotNull { resolveInfo ->
                 val activityInfo = resolveInfo.activityInfo ?: return@mapNotNull null
                 LauncherApp(
@@ -43,6 +48,8 @@ class AppRepository(private val context: Context) {
                 )
             }
             .sortedBy { it.label.lowercase() }
+        PerfLog.log("launchable apps loaded (label+icon) count=${apps.size}")
+        return apps
     }
 
     /**
