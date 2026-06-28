@@ -57,6 +57,11 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    /** 検索文字列を更新する。絞り込みは UiState.filteredApps が行う。 */
+    fun updateQuery(query: String) {
+        _uiState.update { it.copy(query = query) }
+    }
+
     fun clearMessage() {
         _uiState.update { it.copy(errorMessage = null) }
     }

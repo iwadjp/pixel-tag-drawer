@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.dynamicLightColorScheme
@@ -92,6 +93,22 @@ fun AppListScreen(viewModel: AppListViewModel = viewModel()) {
             }
         }
 
+        // 検索欄はアプリが読み込まれているときだけ表示する
+        if (uiState.apps.isNotEmpty()) {
+            item {
+                OutlinedTextField(
+                    value = uiState.query,
+                    onValueChange = viewModel::updateQuery,
+                    singleLine = true,
+                    label = { Text("アプリ名 / パッケージ名で検索") },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
+                )
+            }
+        }
+
+        val filteredApps = uiState.filteredApps
         when {
             uiState.isLoading && uiState.apps.isEmpty() -> {
                 item {
@@ -115,17 +132,28 @@ fun AppListScreen(viewModel: AppListViewModel = viewModel()) {
                 }
             }
 
+            filteredApps.isEmpty() -> {
+                item {
+                    Text(
+                        text = "一致するアプリがありません",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 16.dp),
+                    )
+                }
+            }
+
             else -> {
                 item {
                     Text(
-                        text = "${uiState.apps.size} 件",
+                        text = "${filteredApps.size} 件",
                         style = MaterialTheme.typography.labelMedium,
                         modifier = Modifier.padding(top = 8.dp, bottom = 4.dp),
                     )
                 }
 
                 items(
-                    items = uiState.apps,
+                    items = filteredApps,
                     key = { "${it.packageName}/${it.className}" },
                 ) { app ->
                     AppRow(app = app, onClick = { viewModel.launch(app) })
