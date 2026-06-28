@@ -161,6 +161,12 @@ fun AppListScreen(
                 }
             }
         }
+
+        // tagId -> タグ名。アプリ行に付与済みタグ名を表示するために使う。
+        val tagNameById = remember(tagState.tags) {
+            tagState.tags.associate { it.tagId to it.name }
+        }
+
         when {
             uiState.isLoading && uiState.apps.isEmpty() -> {
                 Text(
@@ -206,8 +212,14 @@ fun AppListScreen(
                         items = filteredApps,
                         key = { "${it.packageName}/${it.className}" },
                     ) { app ->
+                        // このアプリに付与済みのタグ名 (名前順)。未付与なら空。
+                        val tagNames = tagState.appTagMap["${app.packageName}/${app.className}"]
+                            ?.mapNotNull { tagNameById[it] }
+                            ?.sorted()
+                            ?: emptyList()
                         AppRow(
                             app = app,
+                            tagNames = tagNames,
                             onClick = { viewModel.launch(app) },
                             onTag = { tagViewModel.selectAppForTagging(app) },
                         )
@@ -336,7 +348,12 @@ private fun TagFilterSection(
 }
 
 @Composable
-private fun AppRow(app: LauncherApp, onClick: () -> Unit, onTag: () -> Unit) {
+private fun AppRow(
+    app: LauncherApp,
+    tagNames: List<String>,
+    onClick: () -> Unit,
+    onTag: () -> Unit,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -360,6 +377,14 @@ private fun AppRow(app: LauncherApp, onClick: () -> Unit, onTag: () -> Unit) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            // 付与済みタグがあるときだけ控えめに表示する (例: #Google #仕事)
+            if (tagNames.isNotEmpty()) {
+                Text(
+                    text = tagNames.joinToString(" ") { "#$it" },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
         }
         // 行タップ(起動)とは別操作。押すとそのアプリをタグ割り当て対象に選択する
         TextButton(onClick = onTag) {
