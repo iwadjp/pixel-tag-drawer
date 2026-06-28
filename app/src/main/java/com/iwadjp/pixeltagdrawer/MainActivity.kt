@@ -104,6 +104,10 @@ fun AppListScreen(
     // 誤操作防止のため永続化せず、起動時は必ず OFF。
     var tagEditMode by remember { mutableStateOf(false) }
 
+    // 一括タグ付け対象として選択中のアプリキー ("pkg/cls") とその対象タグ。永続化なし。
+    var selectedBulkApps by remember { mutableStateOf(emptySet<String>()) }
+    var bulkTargetTagId by remember { mutableStateOf<Long?>(null) }
+
     // 一覧の最終要素がナビゲーションバーに隠れないよう、その分を一覧下端の余白に加える。
     // 固定エリアには付けず、スクロール領域 (List/Grid) の contentPadding だけに効かせる。
     val navBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
@@ -152,8 +156,8 @@ fun AppListScreen(
             )
         }
 
-        // アプリが選択されているときだけ、タグ割り当てパネルを表示する
-        if (tagState.selectedApp != null) {
+        // 個別タグ編集パネルは、一括選択が無いときだけ表示して過密・競合を避ける
+        if (tagState.selectedApp != null && selectedBulkApps.isEmpty()) {
             SelectedAppTagPanel(
                 state = tagState,
                 onToggle = tagViewModel::setTagForSelectedApp,
@@ -274,12 +278,16 @@ fun AppListScreen(
                             text = "${filteredApps.size} 件",
                             style = MaterialTheme.typography.labelMedium,
                         )
-                        // タグ編集モード切替。OFF にしたら選択中アプリのパネルも閉じる
+                        // タグ編集モード切替。OFF にしたら選択中アプリのパネルと一括選択も閉じる
                         FilterChip(
                             selected = tagEditMode,
                             onClick = {
                                 tagEditMode = !tagEditMode
-                                if (!tagEditMode) tagViewModel.clearSelectedApp()
+                                if (!tagEditMode) {
+                                    tagViewModel.clearSelectedApp()
+                                    selectedBulkApps = emptySet()
+                                    bulkTargetTagId = null
+                                }
                             },
                             label = { Text("タグ編集") },
                         )
@@ -298,6 +306,36 @@ fun AppListScreen(
                     }
                 }
 
+                // タグ編集ON時だけ、選択中アプリへの一括付与/解除バーを表示する
+                if (tagEditMode) {
+                    BulkTagBar(
+                        tags = tagState.tags,
+                        selectedCount = selectedBulkApps.size,
+                        bulkTargetTagId = bulkTargetTagId,
+                        message = tagState.message,
+                        onPickTag = { bulkTargetTagId = it },
+                        onAssign = {
+                            val tagId = bulkTargetTagId
+                            if (tagId != null) {
+                                val targets = uiState.apps
+                                    .filter { selectedBulkApps.contains("${it.packageName}/${it.className}") }
+                                    .map { it.packageName to it.className }
+                                tagViewModel.bulkAssignTag(targets, tagId)
+                            }
+                        },
+                        onRemove = {
+                            val tagId = bulkTargetTagId
+                            if (tagId != null) {
+                                val targets = uiState.apps
+                                    .filter { selectedBulkApps.contains("${it.packageName}/${it.className}") }
+                                    .map { it.packageName to it.className }
+                                tagViewModel.bulkRemoveTag(targets, tagId)
+                            }
+                        },
+                        onClearSelection = { selectedBulkApps = emptySet() },
+                    )
+                }
+
                 when (displayMode) {
                     AppDisplayMode.List -> {
                         LazyColumn(
@@ -314,12 +352,28 @@ fun AppListScreen(
                                     ?.mapNotNull { tagNameById[it] }
                                     ?.sorted()
                                     ?: emptyList()
+                                val key = "${app.packageName}/${app.className}"
                                 AppRow(
                                     app = app,
                                     tagNames = tagNames,
                                     showTagButton = tagEditMode,
-                                    onClick = { viewModel.launch(app) },
-                                    onTag = { tagViewModel.selectAppForTagging(app) },
+                                    selectionMode = tagEditMode,
+                                    selected = selectedBulkApps.contains(key),
+                                    // 編集ON時はタップで一括選択トグル(個別パネルは閉じる)、通常時は起動
+                                    onClick = {
+                                        if (tagEditMode) {
+                                            selectedBulkApps = selectedBulkApps.toMutableSet()
+                                                .apply { if (!add(key)) remove(key) }
+                                            tagViewModel.clearSelectedApp()
+                                        } else {
+                                            viewModel.launch(app)
+                                        }
+                                    },
+                                    // 個別編集を開くときは一括選択を解除して競合を避ける
+                                    onTag = {
+                                        selectedBulkApps = emptySet()
+                                        tagViewModel.selectAppForTagging(app)
+                                    },
                                 )
                                 HorizontalDivider()
                             }
@@ -338,11 +392,24 @@ fun AppListScreen(
                                 items = filteredApps,
                                 key = { "${it.packageName}/${it.className}" },
                             ) { app ->
+                                val key = "${app.packageName}/${app.className}"
                                 AppGridCell(
                                     app = app,
                                     showTagButton = tagEditMode,
-                                    onClick = { viewModel.launch(app) },
-                                    onTag = { tagViewModel.selectAppForTagging(app) },
+                                    selected = tagEditMode && selectedBulkApps.contains(key),
+                                    onClick = {
+                                        if (tagEditMode) {
+                                            selectedBulkApps = selectedBulkApps.toMutableSet()
+                                                .apply { if (!add(key)) remove(key) }
+                                            tagViewModel.clearSelectedApp()
+                                        } else {
+                                            viewModel.launch(app)
+                                        }
+                                    },
+                                    onTag = {
+                                        selectedBulkApps = emptySet()
+                                        tagViewModel.selectAppForTagging(app)
+                                    },
                                 )
                             }
                         }
@@ -503,16 +570,104 @@ private fun TagFilterSection(
 private enum class AppDisplayMode { List, Grid }
 
 @Composable
+private fun BulkTagBar(
+    tags: List<com.iwadjp.pixeltagdrawer.data.db.TagEntity>,
+    selectedCount: Int,
+    bulkTargetTagId: Long?,
+    message: String?,
+    onPickTag: (Long) -> Unit,
+    onAssign: () -> Unit,
+    onRemove: () -> Unit,
+    onClearSelection: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        if (tags.isEmpty()) {
+            // タグ未作成時は1行のみ。作成導線はタグ管理に委ねる
+            Text(
+                text = "一括: $selectedCount 件 (タグ管理でタグを作成)",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            // 1行目: 件数 + 対象タグ選択チップ (チップ列だけ横スクロールで見切れを防ぐ)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = "一括: $selectedCount 件",
+                    style = MaterialTheme.typography.labelMedium,
+                )
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    tags.forEach { tag ->
+                        FilterChip(
+                            selected = bulkTargetTagId == tag.tagId,
+                            onClick = { onPickTag(tag.tagId) },
+                            label = { Text(tag.name) },
+                        )
+                    }
+                }
+            }
+            // 2行目: 短い操作ボタン。横が足りなくても見切れないようスクロール可能にする
+            val canApply = selectedCount > 0 && bulkTargetTagId != null
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                TextButton(onClick = onAssign, enabled = canApply) {
+                    Text("付与")
+                }
+                TextButton(onClick = onRemove, enabled = canApply) {
+                    Text("解除")
+                }
+                TextButton(onClick = onClearSelection, enabled = selectedCount > 0) {
+                    Text("クリア")
+                }
+            }
+        }
+        // 一括操作の結果など短いメッセージ (出るときだけの1行)
+        message?.let { msg ->
+            Text(
+                text = msg,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        HorizontalDivider()
+    }
+}
+
+@Composable
 private fun AppGridCell(
     app: LauncherApp,
     showTagButton: Boolean,
+    selected: Boolean,
     onClick: () -> Unit,
     onTag: () -> Unit,
 ) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
             .clickable(onClick = onClick)
+            // 一括選択中のセルは背景でハイライトする
+            .then(
+                if (selected) Modifier.background(MaterialTheme.colorScheme.secondaryContainer)
+                else Modifier,
+            )
             .padding(vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -542,6 +697,8 @@ private fun AppRow(
     app: LauncherApp,
     tagNames: List<String>,
     showTagButton: Boolean,
+    selectionMode: Boolean,
+    selected: Boolean,
     onClick: () -> Unit,
     onTag: () -> Unit,
 ) {
@@ -553,6 +710,10 @@ private fun AppRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(16.dp),
     ) {
+        // 一括選択中は先頭に選択状態のチェックを表示 (タップ判定は行全体が担う)
+        if (selectionMode) {
+            Checkbox(checked = selected, onCheckedChange = null)
+        }
         AppIcon(app)
         Column(
             // 行タップ起動を保ちつつ、タグボタンを右端へ寄せる

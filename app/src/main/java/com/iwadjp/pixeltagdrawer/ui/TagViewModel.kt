@@ -163,6 +163,44 @@ class TagViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * 選択中の複数アプリへ1つのタグを一括付与する。
+     * 重複付与は IGNORE のため安全。一括操作は Undo/Redo 履歴に積まない。
+     */
+    fun bulkAssignTag(targets: List<Pair<String, String>>, tagId: Long) {
+        if (targets.isEmpty()) return
+        viewModelScope.launch {
+            try {
+                targets.forEach { (packageName, className) ->
+                    repository.assignTag(packageName, className, tagId)
+                }
+                _uiState.update { it.copy(message = "${targets.size}件に一括付与しました") }
+            } catch (e: Exception) {
+                Log.w(TAG, "一括付与に失敗しました", e)
+                _uiState.update { it.copy(message = "一括付与に失敗しました") }
+            }
+        }
+    }
+
+    /**
+     * 選択中の複数アプリから1つのタグを一括解除する。
+     * 付与されていないアプリがあってもクラッシュしない。一括操作は Undo/Redo 履歴に積まない。
+     */
+    fun bulkRemoveTag(targets: List<Pair<String, String>>, tagId: Long) {
+        if (targets.isEmpty()) return
+        viewModelScope.launch {
+            try {
+                targets.forEach { (packageName, className) ->
+                    repository.removeTag(packageName, className, tagId)
+                }
+                _uiState.update { it.copy(message = "${targets.size}件から一括解除しました") }
+            } catch (e: Exception) {
+                Log.w(TAG, "一括解除に失敗しました", e)
+                _uiState.update { it.copy(message = "一括解除に失敗しました") }
+            }
+        }
+    }
+
     /** assign=true で付与、false で解除。重複/不在は DAO 側 IGNORE のため安全。 */
     private suspend fun applyTagEdit(packageName: String, className: String, tagId: Long, assign: Boolean) {
         if (assign) {
