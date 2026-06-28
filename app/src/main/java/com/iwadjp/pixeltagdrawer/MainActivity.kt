@@ -4,7 +4,14 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ShortcutInfo
 import android.content.pm.ShortcutManager
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.Typeface
+import android.graphics.drawable.Icon
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
@@ -109,10 +116,12 @@ sealed interface LaunchFilter {
     object Untagged : LaunchFilter
 }
 
+private const val TAG_SHORTCUT = "PinShortcut"
+
 /**
  * 指定タグで開く Pinned Shortcut の作成をリクエストする。
- * 非対応ランチャー (isRequestPinShortcutSupported=false) ではクラッシュせず false を返す。
- * アイコンは指定せず、システム既定 (アプリアイコン) を使う。
+ * res に launcher icon 資源が無いため、コードで生成した Bitmap アイコンを必ず設定する。
+ * 非対応ランチャーや失敗時はクラッシュせず false を返す。
  */
 private fun requestPinTagShortcut(context: Context, tagId: Long, tagName: String): Boolean {
     val intent = Intent(context, MainActivity::class.java).apply {
@@ -120,7 +129,9 @@ private fun requestPinTagShortcut(context: Context, tagId: Long, tagName: String
         putExtra(MainActivity.EXTRA_FILTER_TAG_ID, tagId)
         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
     }
-    return requestPin(context, id = "tag_$tagId", label = tagName, intent = intent)
+    // アイコン中央の文字はタグ名の先頭1文字。空なら "#"。
+    val iconText = tagName.trim().take(1).ifEmpty { "#" }
+    return requestPin(context, id = "tag_$tagId", label = tagName, iconText = iconText, intent = intent)
 }
 
 /** 「タグなし」(未付与アプリのみ) で開く Pinned Shortcut の作成をリクエストする。 */
@@ -130,22 +141,52 @@ private fun requestPinUntaggedShortcut(context: Context): Boolean {
         putExtra(MainActivity.EXTRA_SHOW_UNTAGGED_ONLY, true)
         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
     }
-    return requestPin(context, id = "untagged", label = "タグなし", intent = intent)
+    return requestPin(context, id = "untagged", label = "タグなし", iconText = "無", intent = intent)
 }
 
-/** 共通: ShortcutInfo を組み立てて requestPinShortcut を呼ぶ。非対応/失敗時は false。 */
-private fun requestPin(context: Context, id: String, label: String, intent: Intent): Boolean {
-    val manager = context.getSystemService(ShortcutManager::class.java) ?: return false
-    if (!manager.isRequestPinShortcutSupported) return false
+/**
+ * 共通: 生成アイコン付き ShortcutInfo を組み立てて requestPinShortcut を呼ぶ。
+ * ShortcutManager が無い / 非対応 / 構築・リクエスト失敗 のいずれもクラッシュさせず false を返す。
+ */
+private fun requestPin(context: Context, id: String, label: String, iconText: String, intent: Intent): Boolean {
+    val manager = context.getSystemService(ShortcutManager::class.java)
+    if (manager == null || !manager.isRequestPinShortcutSupported) {
+        Log.w(TAG_SHORTCUT, "Pinned Shortcut 非対応 (manager=$manager)")
+        return false
+    }
     return try {
         val shortcut = ShortcutInfo.Builder(context, id)
             .setShortLabel(label)
+            .setIcon(buildShortcutIcon(context, iconText))
             .setIntent(intent)
             .build()
         manager.requestPinShortcut(shortcut, null)
     } catch (e: Exception) {
+        Log.w(TAG_SHORTCUT, "Pinned Shortcut 作成に失敗しました (id=$id)", e)
         false
     }
+}
+
+/** ショートカット用の最小アイコンをコード生成する (円背景 + 中央に短い文字)。 */
+private fun buildShortcutIcon(context: Context, text: String): Icon {
+    val sizePx = (96 * context.resources.displayMetrics.density).toInt().coerceAtLeast(96)
+    val bitmap = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bitmap)
+    val radius = sizePx / 2f
+    val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#3F51B5")
+        style = Paint.Style.FILL
+    }
+    canvas.drawCircle(radius, radius, radius, bgPaint)
+    val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.WHITE
+        textAlign = Paint.Align.CENTER
+        textSize = sizePx * 0.5f
+        typeface = Typeface.DEFAULT_BOLD
+    }
+    val baselineY = radius - (textPaint.descent() + textPaint.ascent()) / 2f
+    canvas.drawText(text, radius, baselineY, textPaint)
+    return Icon.createWithBitmap(bitmap)
 }
 
 @Composable
@@ -255,7 +296,7 @@ fun AppListScreen(
                     shortcutMessage = if (ok) {
                         "「${tag.name}」のホーム追加をリクエストしました"
                     } else {
-                        "ホーム画面への追加に対応していません"
+                        "ホーム画面への追加に失敗しました"
                     }
                 },
                 onPinUntagged = {
@@ -263,7 +304,7 @@ fun AppListScreen(
                     shortcutMessage = if (ok) {
                         "「タグなし」のホーム追加をリクエストしました"
                     } else {
-                        "ホーム画面への追加に対応していません"
+                        "ホーム画面への追加に失敗しました"
                     }
                 },
             )
