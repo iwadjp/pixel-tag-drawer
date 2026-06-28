@@ -18,6 +18,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
@@ -32,11 +35,15 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -72,6 +79,9 @@ fun AppListScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val tagState by tagViewModel.uiState.collectAsStateWithLifecycle()
+
+    // 表示モード (リスト / アイコン)。今回は永続化せずメモリ上のみ。
+    var displayMode by remember { mutableStateOf(AppDisplayMode.List) }
 
     // 操作エリア (タイトル/タグ/検索/件数) は固定し、アプリ一覧だけをスクロールさせる。
     // そのため全体は Column、一覧部分のみ weight(1f) を持つ LazyColumn にする。
@@ -199,34 +209,78 @@ fun AppListScreen(
             }
 
             else -> {
-                // 件数は固定エリアに残し、一覧 (LazyColumn) だけをスクロールさせる
-                Text(
-                    text = "${filteredApps.size} 件",
-                    style = MaterialTheme.typography.labelMedium,
-                    modifier = Modifier.padding(top = 4.dp, bottom = 4.dp),
-                )
-
-                LazyColumn(
-                    modifier = Modifier.weight(1f),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 24.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                // 件数と表示モード切替は固定エリアに残し、一覧だけをスクロールさせる
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp, bottom = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    items(
-                        items = filteredApps,
-                        key = { "${it.packageName}/${it.className}" },
-                    ) { app ->
-                        // このアプリに付与済みのタグ名 (名前順)。未付与なら空。
-                        val tagNames = tagState.appTagMap["${app.packageName}/${app.className}"]
-                            ?.mapNotNull { tagNameById[it] }
-                            ?.sorted()
-                            ?: emptyList()
-                        AppRow(
-                            app = app,
-                            tagNames = tagNames,
-                            onClick = { viewModel.launch(app) },
-                            onTag = { tagViewModel.selectAppForTagging(app) },
+                    Text(
+                        text = "${filteredApps.size} 件",
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = displayMode == AppDisplayMode.List,
+                            onClick = { displayMode = AppDisplayMode.List },
+                            label = { Text("リスト") },
                         )
-                        HorizontalDivider()
+                        FilterChip(
+                            selected = displayMode == AppDisplayMode.Grid,
+                            onClick = { displayMode = AppDisplayMode.Grid },
+                            label = { Text("アイコン") },
+                        )
+                    }
+                }
+
+                when (displayMode) {
+                    AppDisplayMode.List -> {
+                        LazyColumn(
+                            modifier = Modifier.weight(1f),
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 24.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            items(
+                                items = filteredApps,
+                                key = { "${it.packageName}/${it.className}" },
+                            ) { app ->
+                                // このアプリに付与済みのタグ名 (名前順)。未付与なら空。
+                                val tagNames = tagState.appTagMap["${app.packageName}/${app.className}"]
+                                    ?.mapNotNull { tagNameById[it] }
+                                    ?.sorted()
+                                    ?: emptyList()
+                                AppRow(
+                                    app = app,
+                                    tagNames = tagNames,
+                                    onClick = { viewModel.launch(app) },
+                                    onTag = { tagViewModel.selectAppForTagging(app) },
+                                )
+                                HorizontalDivider()
+                            }
+                        }
+                    }
+
+                    AppDisplayMode.Grid -> {
+                        LazyVerticalGrid(
+                            columns = GridCells.Fixed(4),
+                            modifier = Modifier.weight(1f),
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 24.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            gridItems(
+                                items = filteredApps,
+                                key = { "${it.packageName}/${it.className}" },
+                            ) { app ->
+                                AppGridCell(
+                                    app = app,
+                                    onClick = { viewModel.launch(app) },
+                                    onTag = { tagViewModel.selectAppForTagging(app) },
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -346,6 +400,37 @@ private fun TagFilterSection(
                     label = { Text(tag.name) },
                 )
             }
+        }
+    }
+}
+
+/** アプリ一覧の表示モード。 */
+private enum class AppDisplayMode { List, Grid }
+
+@Composable
+private fun AppGridCell(app: LauncherApp, onClick: () -> Unit, onTag: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        AppIcon(app)
+        Text(
+            text = app.label,
+            style = MaterialTheme.typography.labelSmall,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
+        )
+        // セル内の最小タグ導線。押すとタグ割り当て対象に選択する
+        TextButton(
+            onClick = onTag,
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+        ) {
+            Text(text = "タグ", style = MaterialTheme.typography.labelSmall)
         }
     }
 }
