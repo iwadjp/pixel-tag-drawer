@@ -6,6 +6,8 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,6 +21,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -28,6 +31,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -130,7 +134,33 @@ fun AppListScreen(
             )
         }
 
-        val filteredApps = uiState.filteredApps
+        // タグが1つ以上あるときだけ、絞り込みチップを表示する (固定エリア内)
+        if (tagState.tags.isNotEmpty()) {
+            TagFilterSection(
+                state = tagState,
+                onToggle = tagViewModel::toggleFilterTag,
+                onClear = tagViewModel::clearFilterTags,
+            )
+        }
+
+        // 検索 (名前/パッケージ) で絞った結果に、選択タグ条件をANDで合成する。
+        // タグ未選択時は検索結果そのまま。複数選択時は全タグを持つアプリのみ。
+        val filteredApps = remember(
+            uiState.filteredApps,
+            tagState.selectedFilterTagIds,
+            tagState.appTagMap,
+        ) {
+            val selected = tagState.selectedFilterTagIds
+            if (selected.isEmpty()) {
+                uiState.filteredApps
+            } else {
+                uiState.filteredApps.filter { app ->
+                    val appTags = tagState.appTagMap["${app.packageName}/${app.className}"]
+                        ?: emptySet()
+                    appTags.containsAll(selected)
+                }
+            }
+        }
         when {
             uiState.isLoading && uiState.apps.isEmpty() -> {
                 Text(
@@ -255,6 +285,53 @@ private fun TagSection(
             }
         }
         HorizontalDivider(modifier = Modifier.padding(top = 8.dp))
+    }
+}
+
+@Composable
+private fun TagFilterSection(
+    state: com.iwadjp.pixeltagdrawer.ui.TagUiState,
+    onToggle: (Long) -> Unit,
+    onClear: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                text = "タグで絞り込み",
+                style = MaterialTheme.typography.titleSmall,
+                modifier = Modifier.weight(1f),
+            )
+            // 選択中があるときだけ、まとめて解除できるようにする
+            if (state.selectedFilterTagIds.isNotEmpty()) {
+                TextButton(onClick = onClear) {
+                    Text("解除")
+                }
+            }
+        }
+        // タグが多くても固定エリアの高さを抑えるため、横スクロールのチップ列にする
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            state.tags.forEach { tag ->
+                FilterChip(
+                    selected = state.selectedFilterTagIds.contains(tag.tagId),
+                    onClick = { onToggle(tag.tagId) },
+                    label = { Text(tag.name) },
+                )
+            }
+        }
     }
 }
 

@@ -15,4 +15,8 @@ data class TagUiState(
     val selectedApp: LauncherApp? = null,
     // 選択中アプリに付与済みの tagId 集合
     val selectedAppTagIds: Set<Long> = emptySet(),
+    // 一覧絞り込みに選択中の tagId 集合 (空ならタグ条件で絞らない)
+    val selectedFilterTagIds: Set<Long> = emptySet(),
+    // 各アプリ ("packageName/className") に付与済みの tagId 集合。一覧絞り込み用。
+    val appTagMap: Map<String, Set<Long>> = emptyMap(),
 )

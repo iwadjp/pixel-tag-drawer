@@ -47,4 +47,8 @@ class TagRepository(context: Context) {
     /** 指定タグが付いたアプリ (中間テーブル行) を監視する。 */
     fun observeAppsByTag(tagId: Long): Flow<List<AppTagCrossRef>> =
         appTagDao.observeByTag(tagId)
+
+    /** 全アプリ-タグ割り当て (中間テーブル全行) を監視する。一覧絞り込み用。 */
+    fun observeAllAppTags(): Flow<List<AppTagCrossRef>> =
+        appTagDao.observeAll()
 }

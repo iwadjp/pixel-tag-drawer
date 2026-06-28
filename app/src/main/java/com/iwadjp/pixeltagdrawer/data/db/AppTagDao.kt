@@ -19,6 +19,9 @@ interface AppTagDao {
     @Delete
     suspend fun delete(crossRef: AppTagCrossRef)
 
+    @Query("SELECT * FROM app_tags")
+    fun observeAll(): Flow<List<AppTagCrossRef>>
+
     @Query("SELECT * FROM app_tags WHERE tagId = :tagId")
     fun observeByTag(tagId: Long): Flow<List<AppTagCrossRef>>
 

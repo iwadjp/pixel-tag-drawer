@@ -32,7 +32,23 @@ class TagViewModel(application: Application) : AndroidViewModel(application) {
     init {
         viewModelScope.launch {
             repository.observeTags().collect { tags ->
-                _uiState.update { it.copy(tags = tags) }
+                // タグが削除されても絞り込み選択が宙に浮かないよう、存在するIDだけ残す
+                val validIds = tags.mapTo(mutableSetOf()) { it.tagId }
+                _uiState.update {
+                    it.copy(
+                        tags = tags,
+                        selectedFilterTagIds = it.selectedFilterTagIds.intersect(validIds),
+                    )
+                }
+            }
+        }
+        viewModelScope.launch {
+            repository.observeAllAppTags().collect { refs ->
+                // "packageName/className" -> 付与済み tagId 集合
+                val map = refs
+                    .groupBy({ "${it.packageName}/${it.className}" }, { it.tagId })
+                    .mapValues { (_, ids) -> ids.toSet() }
+                _uiState.update { it.copy(appTagMap = map) }
             }
         }
     }
@@ -104,6 +120,20 @@ class TagViewModel(application: Application) : AndroidViewModel(application) {
                 Log.w(TAG, "タグ割り当ての更新に失敗しました", e)
             }
         }
+    }
+
+    /** 一覧絞り込みタグのON/OFFを切り替える。複数選択時はAND条件で扱う。 */
+    fun toggleFilterTag(tagId: Long) {
+        _uiState.update {
+            val next = it.selectedFilterTagIds.toMutableSet()
+            if (!next.add(tagId)) next.remove(tagId)
+            it.copy(selectedFilterTagIds = next)
+        }
+    }
+
+    /** 一覧絞り込みタグの選択をすべて解除する。 */
+    fun clearFilterTags() {
+        _uiState.update { it.copy(selectedFilterTagIds = emptySet()) }
     }
 
     /** タグを削除する (UIは任意)。 */
