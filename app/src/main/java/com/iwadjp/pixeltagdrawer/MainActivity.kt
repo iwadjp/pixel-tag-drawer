@@ -23,6 +23,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -80,20 +81,12 @@ fun AppListScreen(
             .padding(horizontal = 24.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Column(
-            modifier = Modifier.padding(top = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text(
-                text = "Pixel Tag Drawer",
-                style = MaterialTheme.typography.headlineMedium,
-            )
-            Text(
-                text = "Pixel Launcherを置き換えない、タグ付き補助ランチャーです。" +
-                    "以下は起動可能アプリ一覧。タップで起動します。",
-                style = MaterialTheme.typography.bodyMedium,
-            )
-        }
+        // 常用時の画面占有を抑えるため、タイトルは小さく1行・説明文は撤去する
+        Text(
+            text = "Pixel Tag Drawer",
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.padding(top = 12.dp),
+        )
 
         TagSection(
             state = tagState,
@@ -128,9 +121,19 @@ fun AppListScreen(
                 onValueChange = viewModel::updateQuery,
                 singleLine = true,
                 label = { Text("アプリ名 / パッケージ名で検索") },
+                // 入力があるときだけ、一発クリアできるボタンを出す
+                trailingIcon = if (uiState.query.isNotEmpty()) {
+                    {
+                        IconButton(onClick = { viewModel.updateQuery("") }) {
+                            Text("✕")
+                        }
+                    }
+                } else {
+                    null
+                },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 8.dp),
+                    .padding(top = 4.dp),
             )
         }
 
@@ -200,7 +203,7 @@ fun AppListScreen(
                 Text(
                     text = "${filteredApps.size} 件",
                     style = MaterialTheme.typography.labelMedium,
-                    modifier = Modifier.padding(top = 8.dp, bottom = 4.dp),
+                    modifier = Modifier.padding(top = 4.dp, bottom = 4.dp),
                 )
 
                 LazyColumn(
