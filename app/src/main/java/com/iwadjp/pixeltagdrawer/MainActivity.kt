@@ -87,6 +87,9 @@ fun AppListScreen(
     // タグ管理UI (作成/変更/削除) の開閉。常用時は畳んで上部を低くする。永続化なし。
     var showTagManagement by remember { mutableStateOf(false) }
 
+    // タグ編集モード。ON のときだけアプリ行/セルに「タグ」ボタンを出す。永続化なし。
+    var tagEditMode by remember { mutableStateOf(false) }
+
     // 操作エリア (タイトル/タグ/検索/件数) は固定し、アプリ一覧だけをスクロールさせる。
     // そのため全体は Column、一覧部分のみ weight(1f) を持つ LazyColumn にする。
     Column(
@@ -243,10 +246,24 @@ fun AppListScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    Text(
-                        text = "${filteredApps.size} 件",
-                        style = MaterialTheme.typography.labelMedium,
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
+                            text = "${filteredApps.size} 件",
+                            style = MaterialTheme.typography.labelMedium,
+                        )
+                        // タグ編集モード切替。OFF にしたら選択中アプリのパネルも閉じる
+                        FilterChip(
+                            selected = tagEditMode,
+                            onClick = {
+                                tagEditMode = !tagEditMode
+                                if (!tagEditMode) tagViewModel.clearSelectedApp()
+                            },
+                            label = { Text("タグ編集") },
+                        )
+                    }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         FilterChip(
                             selected = displayMode == AppDisplayMode.List,
@@ -280,6 +297,7 @@ fun AppListScreen(
                                 AppRow(
                                     app = app,
                                     tagNames = tagNames,
+                                    showTagButton = tagEditMode,
                                     onClick = { viewModel.launch(app) },
                                     onTag = { tagViewModel.selectAppForTagging(app) },
                                 )
@@ -302,6 +320,7 @@ fun AppListScreen(
                             ) { app ->
                                 AppGridCell(
                                     app = app,
+                                    showTagButton = tagEditMode,
                                     onClick = { viewModel.launch(app) },
                                     onTag = { tagViewModel.selectAppForTagging(app) },
                                 )
@@ -464,7 +483,12 @@ private fun TagFilterSection(
 private enum class AppDisplayMode { List, Grid }
 
 @Composable
-private fun AppGridCell(app: LauncherApp, onClick: () -> Unit, onTag: () -> Unit) {
+private fun AppGridCell(
+    app: LauncherApp,
+    showTagButton: Boolean,
+    onClick: () -> Unit,
+    onTag: () -> Unit,
+) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -481,12 +505,14 @@ private fun AppGridCell(app: LauncherApp, onClick: () -> Unit, onTag: () -> Unit
             overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center,
         )
-        // セル内の最小タグ導線。押すとタグ割り当て対象に選択する
-        TextButton(
-            onClick = onTag,
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-        ) {
-            Text(text = "タグ", style = MaterialTheme.typography.labelSmall)
+        // タグ編集モード時だけ、セル内の最小タグ導線を出す
+        if (showTagButton) {
+            TextButton(
+                onClick = onTag,
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+            ) {
+                Text(text = "タグ", style = MaterialTheme.typography.labelSmall)
+            }
         }
     }
 }
@@ -495,6 +521,7 @@ private fun AppGridCell(app: LauncherApp, onClick: () -> Unit, onTag: () -> Unit
 private fun AppRow(
     app: LauncherApp,
     tagNames: List<String>,
+    showTagButton: Boolean,
     onClick: () -> Unit,
     onTag: () -> Unit,
 ) {
@@ -530,9 +557,11 @@ private fun AppRow(
                 )
             }
         }
-        // 行タップ(起動)とは別操作。押すとそのアプリをタグ割り当て対象に選択する
-        TextButton(onClick = onTag) {
-            Text("タグ")
+        // タグ編集モード時だけ、行タップ(起動)とは別のタグ導線を出す
+        if (showTagButton) {
+            TextButton(onClick = onTag) {
+                Text("タグ")
+            }
         }
     }
 }
