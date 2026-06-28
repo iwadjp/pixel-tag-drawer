@@ -158,6 +158,8 @@ fun AppListScreen(
                 state = tagState,
                 onToggle = tagViewModel::setTagForSelectedApp,
                 onClose = tagViewModel::clearSelectedApp,
+                onUndo = tagViewModel::undoLastTagEdit,
+                onRedo = tagViewModel::redoLastTagEdit,
             )
         }
 
@@ -589,6 +591,8 @@ private fun SelectedAppTagPanel(
     state: com.iwadjp.pixeltagdrawer.ui.TagUiState,
     onToggle: (Long, Boolean) -> Unit,
     onClose: () -> Unit,
+    onUndo: () -> Unit,
+    onRedo: () -> Unit,
 ) {
     val app = state.selectedApp ?: return
     Column(
@@ -600,16 +604,31 @@ private fun SelectedAppTagPanel(
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             Text(
                 text = "「${app.label}」のタグ",
                 style = MaterialTheme.typography.titleSmall,
                 modifier = Modifier.weight(1f),
             )
+            // タグ付与/解除に限定した Undo/Redo。可否に応じて有効化する
+            TextButton(onClick = onUndo, enabled = state.canUndo) {
+                Text("元に戻す")
+            }
+            TextButton(onClick = onRedo, enabled = state.canRedo) {
+                Text("やり直す")
+            }
             TextButton(onClick = onClose) {
                 Text("閉じる")
             }
+        }
+        // Undo/Redo の結果など短いメッセージを表示する
+        state.message?.let { msg ->
+            Text(
+                text = msg,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
         if (state.tags.isEmpty()) {
             Text(

@@ -32,6 +32,10 @@ class TagViewModel(application: Application) : AndroidViewModel(application) {
     // 選択中アプリの付与済みタグID購読。選択切替時に張り替える。
     private var selectedAppTagJob: Job? = null
 
+    // タグ付与/解除の Undo/Redo 履歴 (メモリ上のみ・永続化しない)。
+    private val undoStack = ArrayDeque<TagEditAction>()
+    private val redoStack = ArrayDeque<TagEditAction>()
+
     init {
         viewModelScope.launch {
             repository.observeTags().collect { tags ->
@@ -109,19 +113,73 @@ class TagViewModel(application: Application) : AndroidViewModel(application) {
     /**
      * 選択中アプリに対してタグのON/OFFを切り替える。
      * ON で assignTag、OFF で removeTag。結果は observeTagIdsForApp 経由で反映。
+     * 成功時は Undo 履歴に積み、Redo 履歴をクリアする。
      */
     fun setTagForSelectedApp(tagId: Long, checked: Boolean) {
         val app = _uiState.value.selectedApp ?: return
         viewModelScope.launch {
             try {
-                if (checked) {
-                    repository.assignTag(app.packageName, app.className, tagId)
-                } else {
-                    repository.removeTag(app.packageName, app.className, tagId)
-                }
+                applyTagEdit(app.packageName, app.className, tagId, assign = checked)
+                undoStack.addLast(TagEditAction(app.packageName, app.className, tagId, assigned = checked))
+                redoStack.clear()
+                refreshUndoRedoFlags(message = null)
             } catch (e: Exception) {
                 Log.w(TAG, "タグ割り当ての更新に失敗しました", e)
+                _uiState.update { it.copy(message = "タグの更新に失敗しました") }
             }
+        }
+    }
+
+    /** 直前のタグ付与/解除を元に戻す (逆操作を実行)。 */
+    fun undoLastTagEdit() {
+        val action = undoStack.lastOrNull() ?: return
+        viewModelScope.launch {
+            try {
+                // assigned だった操作は解除、解除だった操作は付与で打ち消す
+                applyTagEdit(action.packageName, action.className, action.tagId, assign = !action.assigned)
+                undoStack.removeLast()
+                redoStack.addLast(action)
+                refreshUndoRedoFlags(message = "タグ操作を元に戻しました")
+            } catch (e: Exception) {
+                Log.w(TAG, "Undo に失敗しました", e)
+                _uiState.update { it.copy(message = "元に戻せませんでした") }
+            }
+        }
+    }
+
+    /** Undo したタグ付与/解除をやり直す (元操作を再実行)。 */
+    fun redoLastTagEdit() {
+        val action = redoStack.lastOrNull() ?: return
+        viewModelScope.launch {
+            try {
+                applyTagEdit(action.packageName, action.className, action.tagId, assign = action.assigned)
+                redoStack.removeLast()
+                undoStack.addLast(action)
+                refreshUndoRedoFlags(message = "タグ操作をやり直しました")
+            } catch (e: Exception) {
+                Log.w(TAG, "Redo に失敗しました", e)
+                _uiState.update { it.copy(message = "やり直せませんでした") }
+            }
+        }
+    }
+
+    /** assign=true で付与、false で解除。重複/不在は DAO 側 IGNORE のため安全。 */
+    private suspend fun applyTagEdit(packageName: String, className: String, tagId: Long, assign: Boolean) {
+        if (assign) {
+            repository.assignTag(packageName, className, tagId)
+        } else {
+            repository.removeTag(packageName, className, tagId)
+        }
+    }
+
+    /** Undo/Redo 可否を反映する。message=null でメッセージをクリアする。 */
+    private fun refreshUndoRedoFlags(message: String?) {
+        _uiState.update {
+            it.copy(
+                canUndo = undoStack.isNotEmpty(),
+                canRedo = redoStack.isNotEmpty(),
+                message = message,
+            )
         }
     }
 
@@ -195,6 +253,17 @@ class TagViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
     }
+
+    /**
+     * Undo/Redo 対象のタグ編集操作。
+     * assigned=true は「付与した操作」(Undo=解除)、false は「解除した操作」(Undo=付与)。
+     */
+    private data class TagEditAction(
+        val packageName: String,
+        val className: String,
+        val tagId: Long,
+        val assigned: Boolean,
+    )
 
     private companion object {
         const val TAG = "TagViewModel"
