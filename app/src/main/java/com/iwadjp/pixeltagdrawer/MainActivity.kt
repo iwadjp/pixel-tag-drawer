@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -34,6 +35,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.iwadjp.pixeltagdrawer.model.LauncherApp
 import com.iwadjp.pixeltagdrawer.ui.AppListViewModel
+import com.iwadjp.pixeltagdrawer.ui.TagViewModel
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -57,8 +59,12 @@ fun PixelTagDrawerApp() {
 }
 
 @Composable
-fun AppListScreen(viewModel: AppListViewModel = viewModel()) {
+fun AppListScreen(
+    viewModel: AppListViewModel = viewModel(),
+    tagViewModel: TagViewModel = viewModel(),
+) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val tagState by tagViewModel.uiState.collectAsStateWithLifecycle()
 
     LazyColumn(
         modifier = Modifier
@@ -79,6 +85,14 @@ fun AppListScreen(viewModel: AppListViewModel = viewModel()) {
                     style = MaterialTheme.typography.bodyMedium,
                 )
             }
+        }
+
+        item {
+            TagSection(
+                state = tagState,
+                onNameChange = tagViewModel::updateTagName,
+                onCreate = tagViewModel::createTag,
+            )
         }
 
         uiState.errorMessage?.let { msg ->
@@ -161,6 +175,63 @@ fun AppListScreen(viewModel: AppListViewModel = viewModel()) {
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun TagSection(
+    state: com.iwadjp.pixeltagdrawer.ui.TagUiState,
+    onNameChange: (String) -> Unit,
+    onCreate: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(
+            text = "タグ",
+            style = MaterialTheme.typography.titleSmall,
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            OutlinedTextField(
+                value = state.tagName,
+                onValueChange = onNameChange,
+                singleLine = true,
+                label = { Text("新しいタグ名") },
+                modifier = Modifier.weight(1f),
+            )
+            Button(onClick = onCreate) {
+                Text("タグ追加")
+            }
+        }
+        state.message?.let { msg ->
+            Text(
+                text = msg,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+        if (state.tags.isEmpty()) {
+            Text(
+                text = "タグがありません",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            state.tags.forEach { tag ->
+                Text(
+                    text = "# ${tag.name}",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+        }
+        HorizontalDivider(modifier = Modifier.padding(top = 8.dp))
     }
 }
 
