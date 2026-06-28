@@ -57,8 +57,7 @@ fun PixelTagDrawerApp() {
 
 @Composable
 fun AppListScreen(viewModel: AppListViewModel = viewModel()) {
-    val apps by viewModel.apps.collectAsStateWithLifecycle()
-    val message by viewModel.message.collectAsStateWithLifecycle()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     LazyColumn(
         modifier = Modifier
@@ -81,31 +80,58 @@ fun AppListScreen(viewModel: AppListViewModel = viewModel()) {
             }
         }
 
-        message?.let { msg ->
+        uiState.errorMessage?.let { msg ->
             item {
+                // 目立ちすぎないよう小さめのテキストで表示する
                 Text(
                     text = msg,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
                     modifier = Modifier.padding(top = 8.dp),
                 )
             }
         }
 
-        item {
-            Text(
-                text = "${apps.size} 件",
-                style = MaterialTheme.typography.labelMedium,
-                modifier = Modifier.padding(top = 8.dp, bottom = 4.dp),
-            )
-        }
+        when {
+            uiState.isLoading && uiState.apps.isEmpty() -> {
+                item {
+                    Text(
+                        text = "アプリ一覧を読み込んでいます...",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 16.dp),
+                    )
+                }
+            }
 
-        items(
-            items = apps,
-            key = { "${it.packageName}/${it.className}" },
-        ) { app ->
-            AppRow(app = app, onClick = { viewModel.launch(app) })
-            HorizontalDivider()
+            uiState.apps.isEmpty() -> {
+                item {
+                    Text(
+                        text = "起動可能なアプリが見つかりませんでした",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 16.dp),
+                    )
+                }
+            }
+
+            else -> {
+                item {
+                    Text(
+                        text = "${uiState.apps.size} 件",
+                        style = MaterialTheme.typography.labelMedium,
+                        modifier = Modifier.padding(top = 8.dp, bottom = 4.dp),
+                    )
+                }
+
+                items(
+                    items = uiState.apps,
+                    key = { "${it.packageName}/${it.className}" },
+                ) { app ->
+                    AppRow(app = app, onClick = { viewModel.launch(app) })
+                    HorizontalDivider()
+                }
+            }
         }
     }
 }
