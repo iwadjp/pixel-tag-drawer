@@ -23,6 +23,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -92,6 +93,7 @@ fun AppListScreen(
                 state = tagState,
                 onNameChange = tagViewModel::updateTagName,
                 onCreate = tagViewModel::createTag,
+                onDelete = tagViewModel::deleteTag,
             )
         }
 
@@ -183,6 +185,7 @@ private fun TagSection(
     state: com.iwadjp.pixeltagdrawer.ui.TagUiState,
     onNameChange: (String) -> Unit,
     onCreate: () -> Unit,
+    onDelete: (com.iwadjp.pixeltagdrawer.data.db.TagEntity) -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -225,10 +228,21 @@ private fun TagSection(
             )
         } else {
             state.tags.forEach { tag ->
-                Text(
-                    text = "# ${tag.name}",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = "# ${tag.name}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    // 控えめなテキストボタン。誤操作を避けるため小さめに留める
+                    TextButton(onClick = { onDelete(tag) }) {
+                        Text("削除")
+                    }
+                }
             }
         }
         HorizontalDivider(modifier = Modifier.padding(top = 8.dp))
