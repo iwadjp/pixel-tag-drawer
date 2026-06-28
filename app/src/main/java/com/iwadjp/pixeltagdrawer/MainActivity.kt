@@ -84,7 +84,7 @@ class MainActivity : ComponentActivity() {
         PerfLog.start()
         PerfLog.log("MainActivity.onCreate start")
         launchFilter.value = parseLaunchFilter(intent)
-        PerfLog.log("setContent start (launchFilter=${launchFilter.value})")
+        PerfLog.log("setContent start (launchFilter=${formatLaunchFilter(launchFilter.value)})")
         setContent {
             PixelTagDrawerApp(launchFilter = launchFilter.value)
         }
@@ -121,6 +121,13 @@ class MainActivity : ComponentActivity() {
 sealed interface LaunchFilter {
     data class Tag(val tagId: Long) : LaunchFilter
     object Untagged : LaunchFilter
+}
+
+/** 計測ログ用に LaunchFilter を読みやすい文字列にする (object のクラス名表記を避ける)。 */
+private fun formatLaunchFilter(filter: LaunchFilter?): String = when (filter) {
+    is LaunchFilter.Tag -> "Tag(tagId=${filter.tagId})"
+    LaunchFilter.Untagged -> "Untagged"
+    null -> "none"
 }
 
 private const val TAG_SHORTCUT = "PinShortcut"
@@ -262,7 +269,7 @@ fun AppListScreen(
         }
         launchedViaShortcut = launchFilter != null
         simplifiedView = launchFilter != null
-        PerfLog.log("launch filter applied (filter=$launchFilter, simplified=$simplifiedView)")
+        PerfLog.log("launch filter applied (filter=${formatLaunchFilter(launchFilter)}, simplified=$simplifiedView)")
         if (launchFilter != null) {
             // ショートカット起動時は検索 + 絞り込み一覧中心にし、編集系の残留状態をクリア
             tagEditMode = false
@@ -448,10 +455,11 @@ fun AppListScreen(
             tagState.tags.associate { it.tagId to it.name }
         }
 
-        // 調査用: 絞り込み済み一覧が初めて非空になった時刻を1回だけ計測する。
+        // 調査用: アプリ読込完了後の初回 filteredApps を1回だけ計測する。
+        // 0件 (例: タグなし絞り込みで該当なし) でも記録できるよう、空判定ではなく apps 読込で判定する。
         val perfFirstListLogged = remember { mutableStateOf(false) }
-        LaunchedEffect(filteredApps) {
-            if (!perfFirstListLogged.value && filteredApps.isNotEmpty()) {
+        LaunchedEffect(uiState.apps.isNotEmpty(), filteredApps) {
+            if (!perfFirstListLogged.value && uiState.apps.isNotEmpty()) {
                 perfFirstListLogged.value = true
                 PerfLog.log("first visible filtered list count=${filteredApps.size}")
             }

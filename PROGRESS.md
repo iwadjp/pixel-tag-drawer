@@ -1071,3 +1071,52 @@ Pixel Launcher 補助ランチャーとしての運用導線が大きく改善�
 - タグ色付きアイコン
 - タグ並び替え
 - dogfooding継続
+
+---
+
+## 2026-06-29 初期表示速度の計測結果 (アプリ内診断)
+
+- **対象コミット**: `8ed3460 Add in-app performance diagnostics` / `6467f56 Add startup performance tracing`
+- **対象端末**: Google Pixel 10a
+- **配布/確認方法**: SafeDrop APK List 経由でインストール → アプリ内「診断」から `report()` をコピー (adb/logcat 不使用)
+- **透明性**: 計測値は**利用者が Pixel 10a 上で取得した report()** に基づく。agent (Claude Code) 環境には Pixel 10a 実機も adb も無く、**agent 自身は実機計測を行っていない**。
+
+### 計測結果
+
+共通: app count raw=186 / loaded=186、tags count=17、app-tag rows=213。
+
+| 区間 | 通常起動 | タグ別ショートカット (Tag tagId=14) | タグなしショートカット (Untagged) |
+|---|---|---|---|
+| onCreate→firstList | 1817ms | 2236ms | n/a (※下記) |
+| PM query | 13ms | 15ms | 17ms |
+| query→loaded(label+icon) | **1412ms** | **2047ms** | **1345ms** |
+| loaded→uiState | 1ms | 1ms | 1ms |
+| db sync | 258ms | 154ms | 62ms |
+| applyLaunch→applied | - | 0ms | 0ms |
+| applied→firstList | - | 2178ms | n/a |
+
+- タグ別は filtered list count=16、タグなしは該当0件で first visible が記録されず n/a になった。
+
+### 判断
+
+- 初期表示遅延の主因は **PackageManager query ではなく、全アプリ (186件) の label/icon 同期ロード** (`query→loaded(label+icon)` が 1345〜2047ms と支配的)。
+- PM query は 13〜17ms と高速。DB sync (62〜258ms) と タグ/app-tag Flow 初回受信は主因ではない (DB sync は表示と独立)。
+- 絞り込み結果が 16件でも、初期表示前に 186件全ての label/icon を同期ロードしているため遅い。
+- **次の速度改善本命は「アイコン遅延ロード」** (一覧は label 先行表示、icon は非同期/オンデマンド)。ただし本記録時点では未実装。
+
+### 既知の診断ログ不足 (本コミットで小修正)
+
+- タグなしショートカット (該当0件) で `first visible filtered list` が n/a になった。原因は filteredApps が空のとき first visible ログを出していなかったため。→ **0件でも記録**するよう修正 (apps 読込完了をトリガに変更)。
+- `LaunchFilter.Untagged` が `...$Untagged@hash` と読みにくかった。→ `formatLaunchFilter` で `Untagged` / `Tag(tagId=14)` 表記に改善。
+
+### 次アクション
+
+- 診断ログ小修正の実機再確認 (タグなしで count=0 が出ること、表示が読みやすいこと)。
+- その後、アイコン遅延ロードの最小実装を検討 (本命の B-2 速度改善)。
+
+### 次候補
+
+- アイコン遅延ロード (B-2 本命)
+- 「一覧に戻る」の showTagManagement 副作用回避
+- 診断UIの DEBUG ガード化
+- dogfooding継続
