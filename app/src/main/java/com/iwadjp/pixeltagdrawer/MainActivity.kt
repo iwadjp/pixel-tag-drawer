@@ -38,6 +38,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -51,6 +52,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.iwadjp.pixeltagdrawer.data.AppPreferences
 import com.iwadjp.pixeltagdrawer.model.LauncherApp
 import com.iwadjp.pixeltagdrawer.ui.AppListViewModel
 import com.iwadjp.pixeltagdrawer.ui.TagViewModel
@@ -84,13 +86,22 @@ fun AppListScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val tagState by tagViewModel.uiState.collectAsStateWithLifecycle()
 
-    // 表示モード (リスト / アイコン)。今回は永続化せずメモリ上のみ。
-    var displayMode by remember { mutableStateOf(AppDisplayMode.List) }
+    // 表示状態の最小永続化。前回の表示モード / タグ管理の開閉を復元する。
+    val context = LocalContext.current
+    val prefs = remember(context) { AppPreferences(context) }
 
-    // タグ管理UI (作成/変更/削除) の開閉。常用時は畳んで上部を低くする。永続化なし。
-    var showTagManagement by remember { mutableStateOf(false) }
+    // 表示モード (リスト / アイコン)。前回値を復元し、変更時に保存する。
+    var displayMode by remember {
+        mutableStateOf(if (prefs.isGridMode) AppDisplayMode.Grid else AppDisplayMode.List)
+    }
+    LaunchedEffect(displayMode) { prefs.isGridMode = displayMode == AppDisplayMode.Grid }
 
-    // タグ編集モード。ON のときだけアプリ行/セルに「タグ」ボタンを出す。永続化なし。
+    // タグ管理UI (作成/変更/削除) の開閉。前回値を復元し、変更時に保存する。
+    var showTagManagement by remember { mutableStateOf(prefs.showTagManagement) }
+    LaunchedEffect(showTagManagement) { prefs.showTagManagement = showTagManagement }
+
+    // タグ編集モード。ON のときだけアプリ行/セルに「タグ」ボタンを出す。
+    // 誤操作防止のため永続化せず、起動時は必ず OFF。
     var tagEditMode by remember { mutableStateOf(false) }
 
     // 一覧の最終要素がナビゲーションバーに隠れないよう、その分を一覧下端の余白に加える。

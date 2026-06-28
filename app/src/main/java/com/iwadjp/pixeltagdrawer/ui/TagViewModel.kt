@@ -4,6 +4,7 @@ import android.app.Application
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.iwadjp.pixeltagdrawer.data.AppPreferences
 import com.iwadjp.pixeltagdrawer.data.TagRepository
 import com.iwadjp.pixeltagdrawer.data.db.TagEntity
 import com.iwadjp.pixeltagdrawer.model.LauncherApp
@@ -22,8 +23,10 @@ import kotlinx.coroutines.launch
 class TagViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository = TagRepository(application)
+    private val prefs = AppPreferences(application)
 
-    private val _uiState = MutableStateFlow(TagUiState())
+    // 前回の絞り込み選択を復元する。削除済みIDは observeTags の intersect で除外される。
+    private val _uiState = MutableStateFlow(TagUiState(selectedFilterTagIds = prefs.loadFilterTagIds()))
     val uiState: StateFlow<TagUiState> = _uiState.asStateFlow()
 
     // 選択中アプリの付与済みタグID購読。選択切替時に張り替える。
@@ -129,11 +132,13 @@ class TagViewModel(application: Application) : AndroidViewModel(application) {
             if (!next.add(tagId)) next.remove(tagId)
             it.copy(selectedFilterTagIds = next)
         }
+        prefs.saveFilterTagIds(_uiState.value.selectedFilterTagIds)
     }
 
     /** 一覧絞り込みタグの選択をすべて解除する。 */
     fun clearFilterTags() {
         _uiState.update { it.copy(selectedFilterTagIds = emptySet()) }
+        prefs.saveFilterTagIds(emptySet())
     }
 
     /** タグの名前変更を開始する。既存名を入力欄に入れる。 */
