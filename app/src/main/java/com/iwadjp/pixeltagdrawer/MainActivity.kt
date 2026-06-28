@@ -83,6 +83,9 @@ fun AppListScreen(
     // 表示モード (リスト / アイコン)。今回は永続化せずメモリ上のみ。
     var displayMode by remember { mutableStateOf(AppDisplayMode.List) }
 
+    // タグ管理UI (作成/変更/削除) の開閉。常用時は畳んで上部を低くする。永続化なし。
+    var showTagManagement by remember { mutableStateOf(false) }
+
     // 操作エリア (タイトル/タグ/検索/件数) は固定し、アプリ一覧だけをスクロールさせる。
     // そのため全体は Column、一覧部分のみ weight(1f) を持つ LazyColumn にする。
     Column(
@@ -91,23 +94,38 @@ fun AppListScreen(
             .padding(horizontal = 24.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        // 常用時の画面占有を抑えるため、タイトルは小さく1行・説明文は撤去する
-        Text(
-            text = "Pixel Tag Drawer",
-            style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.padding(top = 12.dp),
-        )
+        // 常用時の画面占有を抑えるため、タイトルは小さく1行・説明文は撤去する。
+        // 右端にタグ管理 (作成/変更/削除) の開閉トグルを置く。
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                text = "Pixel Tag Drawer",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(onClick = { showTagManagement = !showTagManagement }) {
+                Text(if (showTagManagement) "閉じる" else "タグ管理")
+            }
+        }
 
-        TagSection(
-            state = tagState,
-            onNameChange = tagViewModel::updateTagName,
-            onCreate = tagViewModel::createTag,
-            onDelete = tagViewModel::deleteTag,
-            onStartRename = tagViewModel::startRenameTag,
-            onEditingNameChange = tagViewModel::updateEditingTagName,
-            onConfirmRename = tagViewModel::confirmRenameTag,
-            onCancelRename = tagViewModel::cancelRenameTag,
-        )
+        // タグ管理UIは開いているときだけ表示し、通常時の上部を低く保つ
+        if (showTagManagement) {
+            TagSection(
+                state = tagState,
+                onNameChange = tagViewModel::updateTagName,
+                onCreate = tagViewModel::createTag,
+                onDelete = tagViewModel::deleteTag,
+                onStartRename = tagViewModel::startRenameTag,
+                onEditingNameChange = tagViewModel::updateEditingTagName,
+                onConfirmRename = tagViewModel::confirmRenameTag,
+                onCancelRename = tagViewModel::cancelRenameTag,
+            )
+        }
 
         // アプリが選択されているときだけ、タグ割り当てパネルを表示する
         if (tagState.selectedApp != null) {
