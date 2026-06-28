@@ -1,5 +1,17 @@
 ﻿<manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!--
+        起動可能アプリ列挙のためのパッケージ可視性宣言。
+        QUERY_ALL_PACKAGES は使わず、ACTION_MAIN + CATEGORY_LAUNCHER で
+        解決できるActivityのみを対象にする (Android 11+ で必要)。
+    -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+    </queries>
+
     <application
         android:theme="@style/AppTheme"
         android:label="Pixel Tag Drawer"
