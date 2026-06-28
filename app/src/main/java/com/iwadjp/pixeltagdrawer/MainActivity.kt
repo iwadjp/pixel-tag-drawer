@@ -1,6 +1,9 @@
 package com.iwadjp.pixeltagdrawer
 
+import android.content.Context
 import android.content.Intent
+import android.content.pm.ShortcutInfo
+import android.content.pm.ShortcutManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -106,6 +109,45 @@ sealed interface LaunchFilter {
     object Untagged : LaunchFilter
 }
 
+/**
+ * 指定タグで開く Pinned Shortcut の作成をリクエストする。
+ * 非対応ランチャー (isRequestPinShortcutSupported=false) ではクラッシュせず false を返す。
+ * アイコンは指定せず、システム既定 (アプリアイコン) を使う。
+ */
+private fun requestPinTagShortcut(context: Context, tagId: Long, tagName: String): Boolean {
+    val intent = Intent(context, MainActivity::class.java).apply {
+        action = Intent.ACTION_VIEW
+        putExtra(MainActivity.EXTRA_FILTER_TAG_ID, tagId)
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+    }
+    return requestPin(context, id = "tag_$tagId", label = tagName, intent = intent)
+}
+
+/** 「タグなし」(未付与アプリのみ) で開く Pinned Shortcut の作成をリクエストする。 */
+private fun requestPinUntaggedShortcut(context: Context): Boolean {
+    val intent = Intent(context, MainActivity::class.java).apply {
+        action = Intent.ACTION_VIEW
+        putExtra(MainActivity.EXTRA_SHOW_UNTAGGED_ONLY, true)
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+    }
+    return requestPin(context, id = "untagged", label = "タグなし", intent = intent)
+}
+
+/** 共通: ShortcutInfo を組み立てて requestPinShortcut を呼ぶ。非対応/失敗時は false。 */
+private fun requestPin(context: Context, id: String, label: String, intent: Intent): Boolean {
+    val manager = context.getSystemService(ShortcutManager::class.java) ?: return false
+    if (!manager.isRequestPinShortcutSupported) return false
+    return try {
+        val shortcut = ShortcutInfo.Builder(context, id)
+            .setShortLabel(label)
+            .setIntent(intent)
+            .build()
+        manager.requestPinShortcut(shortcut, null)
+    } catch (e: Exception) {
+        false
+    }
+}
+
 @Composable
 fun PixelTagDrawerApp(launchFilter: LaunchFilter? = null) {
     val context = LocalContext.current
@@ -130,6 +172,9 @@ fun AppListScreen(
     // 表示状態の最小永続化。前回の表示モード / タグ管理の開閉を復元する。
     val context = LocalContext.current
     val prefs = remember(context) { AppPreferences(context) }
+
+    // ホーム画面ショートカット作成リクエストの結果メッセージ (タグ管理内に表示)。
+    var shortcutMessage by remember { mutableStateOf<String?>(null) }
 
     // 表示モード (リスト / アイコン)。前回値を復元し、変更時に保存する。
     var displayMode by remember {
@@ -197,6 +242,7 @@ fun AppListScreen(
         if (showTagManagement) {
             TagSection(
                 state = tagState,
+                shortcutMessage = shortcutMessage,
                 onNameChange = tagViewModel::updateTagName,
                 onCreate = tagViewModel::createTag,
                 onDelete = tagViewModel::deleteTag,
@@ -204,6 +250,22 @@ fun AppListScreen(
                 onEditingNameChange = tagViewModel::updateEditingTagName,
                 onConfirmRename = tagViewModel::confirmRenameTag,
                 onCancelRename = tagViewModel::cancelRenameTag,
+                onPinTag = { tag ->
+                    val ok = requestPinTagShortcut(context, tag.tagId, tag.name)
+                    shortcutMessage = if (ok) {
+                        "「${tag.name}」のホーム追加をリクエストしました"
+                    } else {
+                        "ホーム画面への追加に対応していません"
+                    }
+                },
+                onPinUntagged = {
+                    val ok = requestPinUntaggedShortcut(context)
+                    shortcutMessage = if (ok) {
+                        "「タグなし」のホーム追加をリクエストしました"
+                    } else {
+                        "ホーム画面への追加に対応していません"
+                    }
+                },
             )
         }
 
@@ -463,6 +525,7 @@ fun AppListScreen(
 @Composable
 private fun TagSection(
     state: com.iwadjp.pixeltagdrawer.ui.TagUiState,
+    shortcutMessage: String?,
     onNameChange: (String) -> Unit,
     onCreate: () -> Unit,
     onDelete: (com.iwadjp.pixeltagdrawer.data.db.TagEntity) -> Unit,
@@ -470,6 +533,8 @@ private fun TagSection(
     onEditingNameChange: (String) -> Unit,
     onConfirmRename: () -> Unit,
     onCancelRename: () -> Unit,
+    onPinTag: (com.iwadjp.pixeltagdrawer.data.db.TagEntity) -> Unit,
+    onPinUntagged: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -502,6 +567,28 @@ private fun TagSection(
                 text = msg,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.error,
+            )
+        }
+        // 「タグなし」で開くショートカットをホームに追加する導線
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                text = "ホーム画面に追加",
+                style = MaterialTheme.typography.labelMedium,
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(onClick = onPinUntagged) {
+                Text("タグなしを追加")
+            }
+        }
+        shortcutMessage?.let { msg ->
+            Text(
+                text = msg,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         if (state.tags.isEmpty()) {
@@ -553,6 +640,9 @@ private fun TagSection(
                             modifier = Modifier.weight(1f),
                         )
                         // 控えめなテキストボタン。誤操作を避けるため小さめに留める
+                        TextButton(onClick = { onPinTag(tag) }) {
+                            Text("ホーム")
+                        }
                         TextButton(onClick = { onStartRename(tag) }) {
                             Text("変更")
                         }
