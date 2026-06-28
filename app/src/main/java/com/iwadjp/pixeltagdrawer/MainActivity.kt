@@ -103,6 +103,10 @@ fun AppListScreen(
             onNameChange = tagViewModel::updateTagName,
             onCreate = tagViewModel::createTag,
             onDelete = tagViewModel::deleteTag,
+            onStartRename = tagViewModel::startRenameTag,
+            onEditingNameChange = tagViewModel::updateEditingTagName,
+            onConfirmRename = tagViewModel::confirmRenameTag,
+            onCancelRename = tagViewModel::cancelRenameTag,
         )
 
         // アプリが選択されているときだけ、タグ割り当てパネルを表示する
@@ -294,6 +298,10 @@ private fun TagSection(
     onNameChange: (String) -> Unit,
     onCreate: () -> Unit,
     onDelete: (com.iwadjp.pixeltagdrawer.data.db.TagEntity) -> Unit,
+    onStartRename: (com.iwadjp.pixeltagdrawer.data.db.TagEntity) -> Unit,
+    onEditingNameChange: (String) -> Unit,
+    onConfirmRename: () -> Unit,
+    onCancelRename: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -336,19 +344,45 @@ private fun TagSection(
             )
         } else {
             state.tags.forEach { tag ->
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Text(
-                        text = "# ${tag.name}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.weight(1f),
-                    )
-                    // 控えめなテキストボタン。誤操作を避けるため小さめに留める
-                    TextButton(onClick = { onDelete(tag) }) {
-                        Text("削除")
+                if (state.editingTag?.tagId == tag.tagId) {
+                    // 編集中: 名前入力欄 + 保存 / キャンセル
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        OutlinedTextField(
+                            value = state.editingTagName,
+                            onValueChange = onEditingNameChange,
+                            singleLine = true,
+                            label = { Text("タグ名") },
+                            modifier = Modifier.weight(1f),
+                        )
+                        TextButton(onClick = onConfirmRename) {
+                            Text("保存")
+                        }
+                        TextButton(onClick = onCancelRename) {
+                            Text("キャンセル")
+                        }
+                    }
+                } else {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text(
+                            text = "# ${tag.name}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.weight(1f),
+                        )
+                        // 控えめなテキストボタン。誤操作を避けるため小さめに留める
+                        TextButton(onClick = { onStartRename(tag) }) {
+                            Text("変更")
+                        }
+                        TextButton(onClick = { onDelete(tag) }) {
+                            Text("削除")
+                        }
                     }
                 }
             }

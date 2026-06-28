@@ -19,6 +19,13 @@ interface TagDao {
     @Delete
     suspend fun delete(tag: TagEntity)
 
+    /**
+     * タグ名を更新する。name は unique のため、重複時は OR IGNORE で何もしない。
+     * @return 更新された行数 (重複で無視された場合は 0)。
+     */
+    @Query("UPDATE OR IGNORE tags SET name = :name WHERE tagId = :tagId")
+    suspend fun updateTagName(tagId: Long, name: String): Int
+
     @Query("SELECT * FROM tags ORDER BY sortOrder ASC, name COLLATE NOCASE ASC")
     fun observeAll(): Flow<List<TagEntity>>
 }

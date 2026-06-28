@@ -19,4 +19,8 @@ data class TagUiState(
     val selectedFilterTagIds: Set<Long> = emptySet(),
     // 各アプリ ("packageName/className") に付与済みの tagId 集合。一覧絞り込み用。
     val appTagMap: Map<String, Set<Long>> = emptyMap(),
+    // 名前変更中のタグ (未編集時は null)
+    val editingTag: TagEntity? = null,
+    // 名前変更中の入力値
+    val editingTagName: String = "",
 )

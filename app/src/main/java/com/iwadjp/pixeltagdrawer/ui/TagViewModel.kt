@@ -136,6 +136,50 @@ class TagViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update { it.copy(selectedFilterTagIds = emptySet()) }
     }
 
+    /** タグの名前変更を開始する。既存名を入力欄に入れる。 */
+    fun startRenameTag(tag: TagEntity) {
+        _uiState.update { it.copy(editingTag = tag, editingTagName = tag.name, message = null) }
+    }
+
+    /** 名前変更中の入力値を更新する。 */
+    fun updateEditingTagName(name: String) {
+        _uiState.update { it.copy(editingTagName = name) }
+    }
+
+    /** 名前変更をキャンセルする。 */
+    fun cancelRenameTag() {
+        _uiState.update { it.copy(editingTag = null, editingTagName = "", message = null) }
+    }
+
+    /**
+     * 名前変更を確定する。
+     * trim・空文字スキップ・重複IGNORE は TagRepository.renameTag が担保。
+     * 成功時は編集状態を解除し、未更新時は短いメッセージを出す。
+     */
+    fun confirmRenameTag() {
+        val tag = _uiState.value.editingTag ?: return
+        val name = _uiState.value.editingTagName
+        viewModelScope.launch {
+            try {
+                if (name.trim().isEmpty()) {
+                    _uiState.update { it.copy(message = "タグ名を入力してください") }
+                    return@launch
+                }
+                val rows = repository.renameTag(tag.tagId, name)
+                _uiState.update {
+                    if (rows > 0) {
+                        it.copy(editingTag = null, editingTagName = "", message = null)
+                    } else {
+                        it.copy(message = "同名のタグが既にあります")
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "タグ名の変更に失敗しました", e)
+                _uiState.update { it.copy(message = "タグ名の変更に失敗しました") }
+            }
+        }
+    }
+
     /** タグを削除する (UIは任意)。 */
     fun deleteTag(tag: TagEntity) {
         viewModelScope.launch {

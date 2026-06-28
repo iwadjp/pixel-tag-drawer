@@ -32,6 +32,17 @@ class TagRepository(context: Context) {
     /** タグを削除する。 */
     suspend fun deleteTag(tag: TagEntity) = tagDao.delete(tag)
 
+    /**
+     * タグ名を変更する。name は trim し、空文字なら更新しない。
+     * 重複 (name unique) は OR IGNORE のためクラッシュしない。
+     * @return 更新された行数。空文字・重複・該当なしの場合は 0。
+     */
+    suspend fun renameTag(tagId: Long, newName: String): Int {
+        val trimmed = newName.trim()
+        if (trimmed.isEmpty()) return 0
+        return tagDao.updateTagName(tagId, trimmed)
+    }
+
     /** アプリ (packageName + className) にタグを付与する。重複は IGNORE。 */
     suspend fun assignTag(packageName: String, className: String, tagId: Long) =
         appTagDao.insert(AppTagCrossRef(packageName, className, tagId))
