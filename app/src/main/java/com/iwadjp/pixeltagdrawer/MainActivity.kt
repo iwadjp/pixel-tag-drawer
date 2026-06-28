@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -97,6 +98,17 @@ fun AppListScreen(
             )
         }
 
+        // アプリが選択されているときだけ、タグ割り当てパネルを表示する
+        if (tagState.selectedApp != null) {
+            item {
+                SelectedAppTagPanel(
+                    state = tagState,
+                    onToggle = tagViewModel::setTagForSelectedApp,
+                    onClose = tagViewModel::clearSelectedApp,
+                )
+            }
+        }
+
         uiState.errorMessage?.let { msg ->
             item {
                 // 目立ちすぎないよう小さめのテキストで表示する
@@ -172,7 +184,11 @@ fun AppListScreen(
                     items = filteredApps,
                     key = { "${it.packageName}/${it.className}" },
                 ) { app ->
-                    AppRow(app = app, onClick = { viewModel.launch(app) })
+                    AppRow(
+                        app = app,
+                        onClick = { viewModel.launch(app) },
+                        onTag = { tagViewModel.selectAppForTagging(app) },
+                    )
                     HorizontalDivider()
                 }
             }
@@ -250,7 +266,7 @@ private fun TagSection(
 }
 
 @Composable
-private fun AppRow(app: LauncherApp, onClick: () -> Unit) {
+private fun AppRow(app: LauncherApp, onClick: () -> Unit, onTag: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -261,6 +277,8 @@ private fun AppRow(app: LauncherApp, onClick: () -> Unit) {
     ) {
         AppIcon(app)
         Column(
+            // 行タップ起動を保ちつつ、タグボタンを右端へ寄せる
+            modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             Text(
@@ -273,6 +291,68 @@ private fun AppRow(app: LauncherApp, onClick: () -> Unit) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+        // 行タップ(起動)とは別操作。押すとそのアプリをタグ割り当て対象に選択する
+        TextButton(onClick = onTag) {
+            Text("タグ")
+        }
+    }
+}
+
+@Composable
+private fun SelectedAppTagPanel(
+    state: com.iwadjp.pixeltagdrawer.ui.TagUiState,
+    onToggle: (Long, Boolean) -> Unit,
+    onClose: () -> Unit,
+) {
+    val app = state.selectedApp ?: return
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                text = "「${app.label}」のタグ",
+                style = MaterialTheme.typography.titleSmall,
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(onClick = onClose) {
+                Text("閉じる")
+            }
+        }
+        if (state.tags.isEmpty()) {
+            Text(
+                text = "タグがありません",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            state.tags.forEach { tag ->
+                val checked = state.selectedAppTagIds.contains(tag.tagId)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onToggle(tag.tagId, !checked) },
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Checkbox(
+                        checked = checked,
+                        onCheckedChange = { onToggle(tag.tagId, it) },
+                    )
+                    Text(
+                        text = "# ${tag.name}",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+            }
+        }
+        HorizontalDivider(modifier = Modifier.padding(top = 8.dp))
     }
 }
 

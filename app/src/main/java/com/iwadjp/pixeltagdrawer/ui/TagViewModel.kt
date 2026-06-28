@@ -6,6 +6,8 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.iwadjp.pixeltagdrawer.data.TagRepository
 import com.iwadjp.pixeltagdrawer.data.db.TagEntity
+import com.iwadjp.pixeltagdrawer.model.LauncherApp
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -23,6 +25,9 @@ class TagViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _uiState = MutableStateFlow(TagUiState())
     val uiState: StateFlow<TagUiState> = _uiState.asStateFlow()
+
+    // 選択中アプリの付与済みタグID購読。選択切替時に張り替える。
+    private var selectedAppTagJob: Job? = null
 
     init {
         viewModelScope.launch {
@@ -57,6 +62,46 @@ class TagViewModel(application: Application) : AndroidViewModel(application) {
             } catch (e: Exception) {
                 Log.w(TAG, "タグ作成に失敗しました", e)
                 _uiState.update { it.copy(message = "タグの作成に失敗しました") }
+            }
+        }
+    }
+
+    /**
+     * アプリをタグ割り当て対象として選択する。
+     * 選択中アプリの付与済みタグIDを observeTagIdsForApp で購読し直す。
+     */
+    fun selectAppForTagging(app: LauncherApp) {
+        _uiState.update { it.copy(selectedApp = app, selectedAppTagIds = emptySet()) }
+        selectedAppTagJob?.cancel()
+        selectedAppTagJob = viewModelScope.launch {
+            repository.observeTagIdsForApp(app.packageName, app.className).collect { ids ->
+                _uiState.update { it.copy(selectedAppTagIds = ids.toSet()) }
+            }
+        }
+    }
+
+    /** タグ割り当て対象の選択を解除する。 */
+    fun clearSelectedApp() {
+        selectedAppTagJob?.cancel()
+        selectedAppTagJob = null
+        _uiState.update { it.copy(selectedApp = null, selectedAppTagIds = emptySet()) }
+    }
+
+    /**
+     * 選択中アプリに対してタグのON/OFFを切り替える。
+     * ON で assignTag、OFF で removeTag。結果は observeTagIdsForApp 経由で反映。
+     */
+    fun setTagForSelectedApp(tagId: Long, checked: Boolean) {
+        val app = _uiState.value.selectedApp ?: return
+        viewModelScope.launch {
+            try {
+                if (checked) {
+                    repository.assignTag(app.packageName, app.className, tagId)
+                } else {
+                    repository.removeTag(app.packageName, app.className, tagId)
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "タグ割り当ての更新に失敗しました", e)
             }
         }
     }
