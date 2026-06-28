@@ -267,6 +267,21 @@ class TagViewModel(application: Application) : AndroidViewModel(application) {
         if (enabled) prefs.saveFilterTagIds(emptySet())
     }
 
+    /**
+     * 起動Intent指定の単一タグで絞り込む (通常タグフィルタ扱い、タグなしは排他で OFF)。
+     * 存在しない tagId は observeTags の intersect で除外され、フィルタなしに戻る (クラッシュしない)。
+     */
+    fun applyLaunchFilterTag(tagId: Long) {
+        _uiState.update { it.copy(selectedFilterTagIds = setOf(tagId), showUntaggedOnly = false) }
+        prefs.saveFilterTagIds(setOf(tagId))
+        prefs.showUntaggedOnly = false
+    }
+
+    /** 起動Intent指定で「タグなし」絞り込みを適用する。 */
+    fun applyLaunchUntaggedFilter() {
+        setUntaggedFilter(true)
+    }
+
     /** タグの名前変更を開始する。既存名を入力欄に入れる。 */
     fun startRenameTag(tag: TagEntity) {
         _uiState.update { it.copy(editingTag = tag, editingTagName = tag.name, message = null) }

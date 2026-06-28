@@ -1,5 +1,6 @@
 package com.iwadjp.pixeltagdrawer
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -60,22 +61,59 @@ import com.iwadjp.pixeltagdrawer.ui.AppListViewModel
 import com.iwadjp.pixeltagdrawer.ui.TagViewModel
 
 class MainActivity : ComponentActivity() {
+
+    // 起動Intentで指定されたタグフィルタ。onCreate / onNewIntent で更新する。
+    private val launchFilter = mutableStateOf<LaunchFilter?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        launchFilter.value = parseLaunchFilter(intent)
         setContent {
-            PixelTagDrawerApp()
+            PixelTagDrawerApp(launchFilter = launchFilter.value)
         }
+    }
+
+    // 既に起動中のインスタンスへ Intent が届いた場合にも反映する
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        launchFilter.value = parseLaunchFilter(intent)
+    }
+
+    /** 起動Intent extras を解釈する。タグなし指定を優先。指定が無ければ null。 */
+    private fun parseLaunchFilter(intent: Intent?): LaunchFilter? {
+        intent ?: return null
+        if (intent.getBooleanExtra(EXTRA_SHOW_UNTAGGED_ONLY, false)) {
+            return LaunchFilter.Untagged
+        }
+        if (intent.hasExtra(EXTRA_FILTER_TAG_ID)) {
+            val tagId = intent.getLongExtra(EXTRA_FILTER_TAG_ID, -1L)
+            if (tagId >= 0) return LaunchFilter.Tag(tagId)
+        }
+        return null
+    }
+
+    companion object {
+        // 将来の Pinned Shortcut 作成側からも再利用できるよう公開定数にする
+        const val EXTRA_FILTER_TAG_ID = "com.iwadjp.pixeltagdrawer.extra.FILTER_TAG_ID"
+        const val EXTRA_SHOW_UNTAGGED_ONLY = "com.iwadjp.pixeltagdrawer.extra.SHOW_UNTAGGED_ONLY"
     }
 }
 
+/** 起動Intentで指定されたタグフィルタ。 */
+sealed interface LaunchFilter {
+    data class Tag(val tagId: Long) : LaunchFilter
+    object Untagged : LaunchFilter
+}
+
 @Composable
-fun PixelTagDrawerApp() {
+fun PixelTagDrawerApp(launchFilter: LaunchFilter? = null) {
     val context = LocalContext.current
     val colorScheme = dynamicLightColorScheme(context)
 
     MaterialTheme(colorScheme = colorScheme) {
         Surface(modifier = Modifier.fillMaxSize()) {
-            AppListScreen()
+            AppListScreen(launchFilter = launchFilter)
         }
     }
 }
@@ -84,6 +122,7 @@ fun PixelTagDrawerApp() {
 fun AppListScreen(
     viewModel: AppListViewModel = viewModel(),
     tagViewModel: TagViewModel = viewModel(),
+    launchFilter: LaunchFilter? = null,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val tagState by tagViewModel.uiState.collectAsStateWithLifecycle()
@@ -101,6 +140,16 @@ fun AppListScreen(
     // タグ管理UI (作成/変更/削除) の開閉。前回値を復元し、変更時に保存する。
     var showTagManagement by remember { mutableStateOf(prefs.showTagManagement) }
     LaunchedEffect(showTagManagement) { prefs.showTagManagement = showTagManagement }
+
+    // 起動Intentで指定されたタグフィルタを適用する (通常起動時は null で何もしない)。
+    // これは保存済みフィルタの復元より優先される。
+    LaunchedEffect(launchFilter) {
+        when (launchFilter) {
+            is LaunchFilter.Tag -> tagViewModel.applyLaunchFilterTag(launchFilter.tagId)
+            LaunchFilter.Untagged -> tagViewModel.applyLaunchUntaggedFilter()
+            null -> Unit
+        }
+    }
 
     // タグ編集モード。ON のときだけアプリ行/セルに「タグ」ボタンを出す。
     // 誤操作防止のため永続化せず、起動時は必ず OFF。
