@@ -26,13 +26,24 @@ class TagViewModel(application: Application) : AndroidViewModel(application) {
     private val prefs = AppPreferences(application)
 
     // 前回の絞り込み選択を復元する。削除済みIDは observeTags の intersect で除外される。
-    private val _uiState = MutableStateFlow(
-        TagUiState(
-            selectedFilterTagIds = prefs.loadFilterTagIds(),
-            showUntaggedOnly = prefs.showUntaggedOnly,
-        ),
-    )
+    private val _uiState = MutableStateFlow(buildInitialFilterState())
     val uiState: StateFlow<TagUiState> = _uiState.asStateFlow()
+
+    /**
+     * 復元時の初期フィルタ状態。単一選択モードで複数IDが保存されていたら先頭1つに単一化し、
+     * UI破綻を防ぐ (単一化した場合は保存も更新する)。
+     */
+    private fun buildInitialFilterState(): TagUiState {
+        val multi = prefs.multiSelectFilter
+        val saved = prefs.loadFilterTagIds()
+        val ids = if (!multi && saved.size > 1) setOf(saved.first()) else saved
+        if (ids != saved) prefs.saveFilterTagIds(ids)
+        return TagUiState(
+            selectedFilterTagIds = ids,
+            showUntaggedOnly = prefs.showUntaggedOnly,
+            multiSelectFilter = multi,
+        )
+    }
 
     // 選択中アプリの付与済みタグID購読。選択切替時に張り替える。
     private var selectedAppTagJob: Job? = null
@@ -227,17 +238,44 @@ class TagViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * 一覧絞り込みタグのON/OFFを切り替える。複数選択時はAND条件で扱う。
-     * 通常タグを選ぶと「タグなし」絞り込みは排他で OFF にする。
+     * 一覧絞り込みタグのクリック操作。
+     * 複数選択モードON: 従来どおり ON/OFF トグル (AND条件)。
+     * 複数選択モードOFF (既定): 単一選択切替 — 別タグで切替、同じタグ再クリックで全解除。
+     * いずれも「タグなし」絞り込みは排他で OFF にする。
      */
     fun toggleFilterTag(tagId: Long) {
         _uiState.update {
-            val next = it.selectedFilterTagIds.toMutableSet()
-            if (!next.add(tagId)) next.remove(tagId)
+            val next = if (it.multiSelectFilter) {
+                it.selectedFilterTagIds.toMutableSet().apply { if (!add(tagId)) remove(tagId) }
+            } else {
+                if (it.selectedFilterTagIds == setOf(tagId)) emptySet() else setOf(tagId)
+            }
             it.copy(selectedFilterTagIds = next, showUntaggedOnly = false)
         }
         prefs.saveFilterTagIds(_uiState.value.selectedFilterTagIds)
         prefs.showUntaggedOnly = false
+    }
+
+    /** 複数タグAND絞り込みモードのON/OFFを切り替える。 */
+    fun toggleMultiSelectFilter() {
+        setMultiSelectFilter(!_uiState.value.multiSelectFilter)
+    }
+
+    /**
+     * 複数選択モードを設定する。
+     * OFF にした時に複数タグが選ばれていたら、分かりやすさ優先で全解除する。
+     */
+    fun setMultiSelectFilter(enabled: Boolean) {
+        _uiState.update {
+            val ids = if (!enabled && it.selectedFilterTagIds.size > 1) {
+                emptySet()
+            } else {
+                it.selectedFilterTagIds
+            }
+            it.copy(multiSelectFilter = enabled, selectedFilterTagIds = ids)
+        }
+        prefs.multiSelectFilter = enabled
+        prefs.saveFilterTagIds(_uiState.value.selectedFilterTagIds)
     }
 
     /** 一覧絞り込み (通常タグ・タグなし) をすべて解除する。 */

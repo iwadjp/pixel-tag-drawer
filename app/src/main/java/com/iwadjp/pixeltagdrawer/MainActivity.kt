@@ -227,16 +227,6 @@ fun AppListScreen(
     var showTagManagement by remember { mutableStateOf(prefs.showTagManagement) }
     LaunchedEffect(showTagManagement) { prefs.showTagManagement = showTagManagement }
 
-    // 起動Intentで指定されたタグフィルタを適用する (通常起動時は null で何もしない)。
-    // これは保存済みフィルタの復元より優先される。
-    LaunchedEffect(launchFilter) {
-        when (launchFilter) {
-            is LaunchFilter.Tag -> tagViewModel.applyLaunchFilterTag(launchFilter.tagId)
-            LaunchFilter.Untagged -> tagViewModel.applyLaunchUntaggedFilter()
-            null -> Unit
-        }
-    }
-
     // タグ編集モード。ON のときだけアプリ行/セルに「タグ」ボタンを出す。
     // 誤操作防止のため永続化せず、起動時は必ず OFF。
     var tagEditMode by remember { mutableStateOf(false) }
@@ -244,6 +234,30 @@ fun AppListScreen(
     // 一括タグ付け対象として選択中のアプリキー ("pkg/cls") とその対象タグ。永続化なし。
     var selectedBulkApps by remember { mutableStateOf(emptySet<String>()) }
     var bulkTargetTagId by remember { mutableStateOf<Long?>(null) }
+
+    // ショートカット/外部フィルタ起動かどうか。「一覧に戻る」導線の表示判定に使う (セッション内固定)。
+    var launchedViaShortcut by remember { mutableStateOf(launchFilter != null) }
+    // 簡素表示中か。ショートカット起動時は初期ON。「編集」/「一覧に戻る」で切り替える。
+    var simplifiedView by remember { mutableStateOf(launchFilter != null) }
+
+    // 起動Intentで指定されたタグフィルタを適用し、ショートカット起動時は編集系を畳む。
+    // これは保存済みフィルタの復元より優先される。
+    LaunchedEffect(launchFilter) {
+        when (launchFilter) {
+            is LaunchFilter.Tag -> tagViewModel.applyLaunchFilterTag(launchFilter.tagId)
+            LaunchFilter.Untagged -> tagViewModel.applyLaunchUntaggedFilter()
+            null -> Unit
+        }
+        launchedViaShortcut = launchFilter != null
+        simplifiedView = launchFilter != null
+        if (launchFilter != null) {
+            // ショートカット起動時は検索 + 絞り込み一覧中心にし、編集系の残留状態をクリア
+            tagEditMode = false
+            selectedBulkApps = emptySet()
+            bulkTargetTagId = null
+            tagViewModel.clearSelectedApp()
+        }
+    }
 
     // 一覧の最終要素がナビゲーションバーに隠れないよう、その分を一覧下端の余白に加える。
     // 固定エリアには付けず、スクロール領域 (List/Grid) の contentPadding だけに効かせる。
@@ -274,13 +288,33 @@ fun AppListScreen(
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.weight(1f),
             )
-            TextButton(onClick = { showTagManagement = !showTagManagement }) {
-                Text(if (showTagManagement) "閉じる" else "タグ管理")
+            // 簡素表示中は「編集」で従来UIへ。ショートカット起動時の通常UIには「一覧に戻る」を出す。
+            if (simplifiedView) {
+                TextButton(onClick = { simplifiedView = false }) {
+                    Text("編集")
+                }
+            } else {
+                if (launchedViaShortcut) {
+                    TextButton(onClick = {
+                        // 簡素表示へ戻す。絞り込み条件は維持し、編集系の状態だけ畳む。
+                        simplifiedView = true
+                        showTagManagement = false
+                        tagEditMode = false
+                        selectedBulkApps = emptySet()
+                        bulkTargetTagId = null
+                        tagViewModel.clearSelectedApp()
+                    }) {
+                        Text("一覧に戻る")
+                    }
+                }
+                TextButton(onClick = { showTagManagement = !showTagManagement }) {
+                    Text(if (showTagManagement) "閉じる" else "タグ管理")
+                }
             }
         }
 
-        // タグ管理UIは開いているときだけ表示し、通常時の上部を低く保つ
-        if (showTagManagement) {
+        // タグ管理UIは開いているときだけ表示。ショートカット簡素表示中は隠す。
+        if (showTagManagement && !simplifiedView) {
             TagSection(
                 state = tagState,
                 shortcutMessage = shortcutMessage,
@@ -346,13 +380,14 @@ fun AppListScreen(
             )
         }
 
-        // タグが1つ以上あるときだけ、絞り込みチップを表示する (固定エリア内)
-        if (tagState.tags.isNotEmpty()) {
+        // 絞り込みチップはタグがあり、かつショートカット簡素表示でないときだけ表示する
+        if (tagState.tags.isNotEmpty() && !simplifiedView) {
             TagFilterSection(
                 state = tagState,
                 onToggle = tagViewModel::toggleFilterTag,
                 onClear = tagViewModel::clearFilterTags,
                 onToggleUntagged = tagViewModel::toggleUntaggedFilter,
+                onToggleMultiSelect = tagViewModel::toggleMultiSelectFilter,
             )
         }
 
@@ -428,19 +463,21 @@ fun AppListScreen(
                             text = "${filteredApps.size} 件",
                             style = MaterialTheme.typography.labelMedium,
                         )
-                        // タグ編集モード切替。OFF にしたら選択中アプリのパネルと一括選択も閉じる
-                        FilterChip(
-                            selected = tagEditMode,
-                            onClick = {
-                                tagEditMode = !tagEditMode
-                                if (!tagEditMode) {
-                                    tagViewModel.clearSelectedApp()
-                                    selectedBulkApps = emptySet()
-                                    bulkTargetTagId = null
-                                }
-                            },
-                            label = { Text("タグ編集") },
-                        )
+                        // タグ編集モード切替。簡素表示中は出さない。OFF で一括選択も閉じる
+                        if (!simplifiedView) {
+                            FilterChip(
+                                selected = tagEditMode,
+                                onClick = {
+                                    tagEditMode = !tagEditMode
+                                    if (!tagEditMode) {
+                                        tagViewModel.clearSelectedApp()
+                                        selectedBulkApps = emptySet()
+                                        bulkTargetTagId = null
+                                    }
+                                },
+                                label = { Text("タグ編集") },
+                            )
+                        }
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         FilterChip(
@@ -456,8 +493,8 @@ fun AppListScreen(
                     }
                 }
 
-                // タグ編集ON時だけ、選択中アプリへの一括付与/解除バーを表示する
-                if (tagEditMode) {
+                // タグ編集ON かつ簡素表示でないときだけ、一括付与/解除バーを表示する
+                if (tagEditMode && !simplifiedView) {
                     BulkTagBar(
                         tags = tagState.tags,
                         selectedCount = selectedBulkApps.size,
@@ -482,7 +519,11 @@ fun AppListScreen(
                                 tagViewModel.bulkRemoveTag(targets, tagId)
                             }
                         },
-                        onClearSelection = { selectedBulkApps = emptySet() },
+                        // 「クリア」は選択アプリと対象タグの両方を解除する
+                        onClearSelection = {
+                            selectedBulkApps = emptySet()
+                            bulkTargetTagId = null
+                        },
                     )
                 }
 
@@ -705,6 +746,7 @@ private fun TagFilterSection(
     onToggle: (Long) -> Unit,
     onClear: () -> Unit,
     onToggleUntagged: () -> Unit,
+    onToggleMultiSelect: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -715,12 +757,18 @@ private fun TagFilterSection(
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text(
                 text = "タグで絞り込み",
                 style = MaterialTheme.typography.titleSmall,
                 modifier = Modifier.weight(1f),
+            )
+            // 複数選択ON で複数タグAND。OFF(既定)はクリックで単一切替。
+            FilterChip(
+                selected = state.multiSelectFilter,
+                onClick = onToggleMultiSelect,
+                label = { Text("複数選択") },
             )
             // いずれかの絞り込みが効いている時だけ、まとめて解除できるようにする
             if (state.selectedFilterTagIds.isNotEmpty() || state.showUntaggedOnly) {

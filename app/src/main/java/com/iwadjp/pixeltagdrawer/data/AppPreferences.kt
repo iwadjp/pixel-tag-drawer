@@ -36,6 +36,13 @@ class AppPreferences(context: Context) {
             prefs.edit().putBoolean(KEY_SHOW_UNTAGGED_ONLY, value).apply()
         }
 
+    /** 複数タグAND絞り込みモード。未保存は false (単一選択)。 */
+    var multiSelectFilter: Boolean
+        get() = prefs.getBoolean(KEY_MULTI_SELECT_FILTER, false)
+        set(value) {
+            prefs.edit().putBoolean(KEY_MULTI_SELECT_FILTER, value).apply()
+        }
+
     /**
      * 選択中タグフィルタID集合を読み込む。
      * 形式は Long ID のカンマ区切り (例: "1,3,8")。空なら空集合。
@@ -57,6 +64,7 @@ class AppPreferences(context: Context) {
         const val KEY_DISPLAY_MODE = "display_mode"
         const val KEY_SHOW_TAG_MANAGEMENT = "show_tag_management"
         const val KEY_SHOW_UNTAGGED_ONLY = "show_untagged_only"
+        const val KEY_MULTI_SELECT_FILTER = "multi_select_filter"
         const val KEY_FILTER_TAG_IDS = "selected_filter_tag_ids"
         const val DISPLAY_LIST = "list"
         const val DISPLAY_GRID = "grid"
