@@ -831,3 +831,63 @@ dogfooding FB「複数のアプリに、一度にタグを付けたい」に対�
 - タグ色
 - Undo/Redo 対象拡張
 - dogfooding継続
+
+---
+
+## 2026-06-28 タグ指定起動 Intent 対応の実機確認
+
+- **対象コミット**: `bfc35e5 Add launch filter intent support`
+- **対象端末**: Google Pixel 10a
+- **配布方法**: SafeDrop APK List 経由 + adb 起動確認
+- **対象機能**:
+  - tagId指定起動
+  - タグなし指定起動
+  - 将来の Pinned Shortcut 用 Intent 土台
+- **結果**: test ok
+
+### 確認項目
+
+- [x] APK更新インストール
+- [x] 通常起動
+- [x] 保存済みフィルタ復元
+- [x] tagId指定起動で対象タグ絞り込み状態になる
+- [x] タグなし指定起動で未付与アプリのみ表示される
+- [x] tagId指定とタグなし指定の両方指定時、タグなしが優先される
+- [x] 不正tagIdでクラッシュしない
+- [x] 不正tagId時は実質フィルタなし相当になる
+- [x] 起動指定後に画面上でフィルタ変更できる
+- [x] 検索・検索一発クリアが従来どおり動作
+- [x] 一括タグ付与/解除が従来どおり動作
+- [x] タグ管理が従来どおり動作
+- [x] リスト/アイコン表示切替が従来どおり動作
+- [x] 上下インセット対応が従来どおり動作
+- [x] アプリ起動が従来どおり動作
+
+### 確認用 adb コマンド
+
+```
+# 通常起動
+adb shell am start -n com.iwadjp.pixeltagdrawer/.MainActivity
+# タグID指定起動 (例: tagId=1)
+adb shell am start -n com.iwadjp.pixeltagdrawer/.MainActivity --el com.iwadjp.pixeltagdrawer.extra.FILTER_TAG_ID 1
+# タグなし指定起動
+adb shell am start -n com.iwadjp.pixeltagdrawer/.MainActivity --ez com.iwadjp.pixeltagdrawer.extra.SHOW_UNTAGGED_ONLY true
+# 両方指定 (タグなし優先)
+adb shell am start -n com.iwadjp.pixeltagdrawer/.MainActivity --el com.iwadjp.pixeltagdrawer.extra.FILTER_TAG_ID 1 --ez com.iwadjp.pixeltagdrawer.extra.SHOW_UNTAGGED_ONLY true
+# 不正tagId (クラッシュせずフィルタなし相当)
+adb shell am start -n com.iwadjp.pixeltagdrawer/.MainActivity --el com.iwadjp.pixeltagdrawer.extra.FILTER_TAG_ID 999999
+```
+
+### 判断
+
+Pinned Shortcut 実装前の土台として、外部Intentから指定タグ/タグなしで開けるようになった。
+通常起動時の保存済みフィルタ復元は維持した。
+起動指定がある場合は保存済みフィルタより起動指定を優先する仕様とした。
+次はこの Intent 土台を使って Pinned Shortcut 作成UIへ進める。
+
+### 次候補
+
+- Pinned Shortcut 作成UI
+- タグ並び替え
+- タグ色
+- dogfooding継続
