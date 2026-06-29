@@ -607,12 +607,14 @@ fun AppListScreen(
             }
             sortApps(tagFiltered, uiState.sortMode)
         }
-        LaunchedEffect(uiState.sortMode) {
+        LaunchedEffect(uiState.sortMode, sortedApps, simplified) {
             val first = sortedApps.firstOrNull()
             PerfLog.log(
-                "sorted list first item mode=${uiState.sortMode.prefValue} " +
-                    "first=${first?.packageName}/${first?.className} " +
-                    "count=${first?.launchCount} last=${first?.lastLaunchedAt}",
+                "[SORT] sort result mode=${uiState.sortMode.prefValue} " +
+                    "count=${sortedApps.size} " +
+                    "nonZero=${sortedApps.count { it.launchCount > 0 || it.lastLaunchedAt > 0L }} " +
+                    "simplified=$simplified " +
+                    "top=${first?.label?.take(24)}:${first?.launchCount}:${first?.lastLaunchedAt}",
             )
         }
 

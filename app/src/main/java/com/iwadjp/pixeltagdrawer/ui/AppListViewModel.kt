@@ -63,18 +63,25 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
                 // 失敗しても一覧表示は壊さない。古い世代の結果は反映しない。
                 try {
                     val stats = withContext(Dispatchers.IO) { repository.loadLaunchStats() }
+                    PerfLog.log(
+                        "[SORT] launch stats loaded rows=${stats.size} " +
+                            "nonZero=${stats.count { it.value.first > 0 || it.value.second > 0L }}",
+                    )
                     if (generation == loadGeneration) {
                         _uiState.update { state ->
-                            state.copy(
-                                apps = state.apps.map { app ->
-                                    val s = stats["${app.packageName}/${app.className}"]
+                            val mergedApps = state.apps.map { app ->
+                                val s = stats[app.appId()]
                                     if (s != null && (app.launchCount != s.first || app.lastLaunchedAt != s.second)) {
                                         app.copy(launchCount = s.first, lastLaunchedAt = s.second)
                                     } else {
                                         app
                                     }
-                                },
+                            }
+                            PerfLog.log(
+                                "[SORT] launch stats merged apps=${mergedApps.size} " +
+                                    "nonZero=${mergedApps.count { it.hasLaunchStats() }}",
                             )
+                            state.copy(apps = mergedApps)
                         }
                     }
                 } catch (e: Exception) {
@@ -114,12 +121,15 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
                 val snapshot = HashMap(pending)
                 pending.clear()
                 _uiState.update { state ->
-                    state.copy(
-                        apps = state.apps.map { app ->
-                            val icon = snapshot["${app.packageName}/${app.className}"]
-                            if (icon != null && app.icon == null) app.copy(icon = icon) else app
-                        },
+                    val mergedApps = state.apps.map { app ->
+                        val icon = snapshot[app.appId()]
+                        if (icon != null && app.icon == null) app.copy(icon = icon) else app
+                    }
+                    PerfLog.log(
+                        "[SORT] icon batch applied preserves stats " +
+                            "nonZero=${mergedApps.count { it.hasLaunchStats() }}",
                     )
+                    state.copy(apps = mergedApps)
                 }
             }
 
@@ -134,7 +144,7 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
                         firstLogged = true
                         PerfLog.log("icon lazy load first icon")
                     }
-                    pending["${app.packageName}/${app.className}"] = icon
+                    pending[app.appId()] = icon
                     if (pending.size >= ICON_FLUSH_BATCH) flush()
                 } else {
                     failed++
@@ -151,6 +161,10 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
     fun launch(app: LauncherApp) {
         val context = getApplication<Application>()
         try {
+            PerfLog.log(
+                "[SORT] app launch clicked label=${app.safeLogLabel()} " +
+                    "countBefore=${app.launchCount} lastBefore=${app.lastLaunchedAt}",
+            )
             context.startActivity(repository.buildLaunchIntent(app))
             _uiState.update { it.copy(errorMessage = null) }
             // 起動できた時だけ履歴を更新する (通常モード/簡素モードどちらの起動も対象)。
@@ -168,11 +182,11 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
      */
     private fun recordLaunch(app: LauncherApp) {
         val now = System.currentTimeMillis()
-        val key = "${app.packageName}/${app.className}"
+        val key = app.appId()
         _uiState.update { state ->
             state.copy(
                 apps = state.apps.map {
-                    if ("${it.packageName}/${it.className}" == key) {
+                    if (it.appId() == key) {
                         it.copy(launchCount = it.launchCount + 1, lastLaunchedAt = now)
                     } else {
                         it
@@ -180,14 +194,43 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
                 },
             )
         }
+        _uiState.value.apps.firstOrNull { it.appId() == key }?.let { updated ->
+            PerfLog.log(
+                "[SORT] app launch stats updated in memory label=${updated.safeLogLabel()} " +
+                    "countAfter=${updated.launchCount} lastAfter=${updated.lastLaunchedAt} " +
+                    "nonZero=${_uiState.value.apps.count { it.hasLaunchStats() }}",
+            )
+        }
         viewModelScope.launch {
             try {
-                withContext(Dispatchers.IO) { repository.recordLaunch(app.packageName, app.className) }
+                PerfLog.log("[SORT] DB recordLaunch requested appHash=${key.hashCode()}")
+                val stats = withContext(Dispatchers.IO) {
+                    repository.recordLaunch(app.packageName, app.className)
+                    repository.loadLaunchStats()
+                }
+                PerfLog.log(
+                    "[SORT] launch stats loaded after record rows=${stats.size} " +
+                        "nonZero=${stats.count { it.value.first > 0 || it.value.second > 0L }}",
+                )
+                _uiState.update { state ->
+                    val mergedApps = state.apps.map { current ->
+                        val s = stats[current.appId()]
+                        if (s != null && (current.launchCount != s.first || current.lastLaunchedAt != s.second)) {
+                            current.copy(launchCount = s.first, lastLaunchedAt = s.second)
+                        } else {
+                            current
+                        }
+                    }
+                    PerfLog.log(
+                        "[SORT] launch stats merged after record apps=${mergedApps.size} " +
+                            "nonZero=${mergedApps.count { it.hasLaunchStats() }}",
+                    )
+                    state.copy(apps = mergedApps)
+                }
             } catch (e: Exception) {
                 Log.w(TAG, "起動履歴の更新に失敗しました", e)
             }
         }
-        PerfLog.log("app launch stats updated")
     }
 
     /** 並び順を変更し永続化する。同じ値なら何もしない。 */
@@ -195,7 +238,7 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
         if (_uiState.value.sortMode == mode) return
         _uiState.update { it.copy(sortMode = mode) }
         prefs.appSortMode = mode.prefValue
-        PerfLog.log("sort mode changed -> ${mode.prefValue}")
+        PerfLog.log("[SORT] sort mode changed mode=${mode.prefValue}")
     }
 
     /** 検索文字列を更新する。絞り込みは UiState.filteredApps が行う。 */
@@ -213,3 +256,9 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
         const val ICON_FLUSH_BATCH = 12
     }
 }
+
+private fun LauncherApp.appId(): String = "$packageName/$className"
+
+private fun LauncherApp.hasLaunchStats(): Boolean = launchCount > 0 || lastLaunchedAt > 0L
+
+private fun LauncherApp.safeLogLabel(): String = label.take(24)
