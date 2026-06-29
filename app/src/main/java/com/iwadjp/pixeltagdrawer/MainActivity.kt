@@ -1226,8 +1226,9 @@ private fun BulkTagBar(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 4.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp),
+            .offset(y = (-2).dp)
+            .padding(top = 0.dp, bottom = 2.dp),
+        verticalArrangement = Arrangement.spacedBy(0.dp),
     ) {
         if (tags.isEmpty()) {
             // タグ未作成時は1行のみ。作成導線はタグ管理に委ねる
@@ -1268,17 +1269,16 @@ private fun BulkTagBar(
                 modifier = Modifier
                     .fillMaxWidth()
                     .horizontalScroll(rememberScrollState()),
+                verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                TextButton(onClick = onAssign, enabled = canApply) {
-                    Text("付与")
-                }
-                TextButton(onClick = onRemove, enabled = canApply) {
-                    Text("解除")
-                }
-                TextButton(onClick = onClearSelection, enabled = selectedCount > 0) {
-                    Text("クリア")
-                }
+                CompactBulkAction(text = "付与", enabled = canApply, onClick = onAssign)
+                CompactBulkAction(text = "解除", enabled = canApply, onClick = onRemove)
+                CompactBulkAction(
+                    text = "クリア",
+                    enabled = selectedCount > 0,
+                    onClick = onClearSelection,
+                )
             }
         }
         // 一括操作の結果など短いメッセージ (出るときだけの1行)
@@ -1290,6 +1290,32 @@ private fun BulkTagBar(
             )
         }
         HorizontalDivider()
+    }
+}
+
+@Composable
+private fun CompactBulkAction(
+    text: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    val color = if (enabled) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+    }
+    Box(
+        modifier = Modifier
+            .heightIn(min = 32.dp)
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 8.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelLarge,
+            color = color,
+        )
     }
 }
 
