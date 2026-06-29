@@ -1171,3 +1171,68 @@ Pixel Launcher 補助ランチャーとしての運用導線が大きく改善�
 - 通常起動の label 取得コスト調査 (label キャッシュ / DB先行表示)
 - 表示対象優先の icon load
 - icon バッチ数調整
+
+---
+
+## 2026-06-29 ショートカット中継 Activity (ShortcutEntryActivity) 実機確認
+
+- **対象コミット**: `406dfda Route pinned shortcuts through entry activity`
+- **対象端末**: Google Pixel 10a
+- **配布/確認方法**: 新ビルド APK をインストール → **ホーム上の既存ショートカットを削除し、本ビルドでタグ別/タグなしショートカットを作り直して**確認 → アプリ内「診断」`== launch/ui trace ==` を参照 (adb/logcat 不使用)
+- **透明性**: 確認結果は**利用者が Pixel 10a 上で取得した test ok 報告**に基づく。agent (Claude Code) 環境には Pixel 10a 実機も adb も無く、**agent 自身は実機確認を行っていない**。
+
+### 課題
+
+- Pinned Shortcut が `MainActivity` を直接 `ACTION_VIEW` 起動していたため、ショートカット起動状態の MainActivity が**通常アプリと同じ task/affinity の root** になっていた。
+- その状態でホームの通常アイコンをタップしても MAIN/LAUNCHER Intent が届かず、既存 Activity が **onResume だけで純resume** するケースがあった。
+- このとき `normalLauncher` 判定も `restoreManualFilters()` も発火できず、Simplified + ショートカット由来フィルタが残ったまま通常モードへ戻れなかった。
+
+### これまでの経緯
+
+- `d2c3598` UI mode を None / Simplified / Editing に整理。
+- `dcea6ec` `onNewIntent(filter=null)` による通常起動リセットを試みたが、通常アイコンタップが onNewIntent として届かないケースがあり不十分。
+- `bb5b0d5` Launch/UI mode 診断 (`[LM]` / `== launch/ui trace ==`) を追加。
+- `088328b` 初期 onCreate の MAIN/LAUNCHER を通常ランチャー起動として扱い reset したが、**通常モードの手動フィルタまで消してしまう**問題が発覚。
+- `327b7f6` ショートカット由来フィルタを transient 化 (非永続) し、通常起動時は `clearFilterTags()` ではなく `restoreManualFilters()` へ変更。
+- それでも**古いショートカット経由では通常アイコンタップが純resumeになり** `restoreManualFilters()` が発火しないケースが残った (本コミットの対象)。
+
+### 406dfda の修正
+
+- `ShortcutEntryActivity` (NoDisplay の薄い中継 Activity) を追加。
+- Pinned Shortcut の起動先を `MainActivity` → `ShortcutEntryActivity` に変更。
+- 中継は `taskAffinity="" / excludeFromRecents="true"` を指定し、通常ランチャー task と分離。
+- 受け取った `FILTER_TAG_ID` / `SHOW_UNTAGGED_ONLY` を MainActivity へ `ACTION_VIEW` で転送 (NEW_TASK は付けず、中継 task 内へ MainActivity を載せる) し finish。
+- これにより通常アイコンタップは別 affinity の通常 task を起こし、MainActivity が MAIN/LAUNCHER の onCreate を受けて `normalLauncher=true → restoreManualFilters` に入れる。
+- `HOME` / `QUERY_ALL_PACKAGES` / `singleTask` / `launchMode` は追加していない。`onResume` 推定リセットも行っていない。
+- MainActivity の `launchFilter` / `applyShortcut*` / `restoreManualFilters` の既存分岐は維持 (変更は pinned shortcut の起動先2箇所のみ)。
+
+### 既存ショートカットの扱い
+
+- 既存 Pinned Shortcut は**自動更新されない** (古い MainActivity 直起動のまま)。
+- 実機確認時は**ホーム上の既存タグ別/タグなしショートカットを削除し、本ビルドで作り直す**必要があった。古いショートカットのままでは本修正の効果は出ない。
+
+### Pixel 10a 実機確認 (利用者報告: test ok)
+
+- 新しく作り直したショートカットで確認。
+- ショートカット起動は **Simplified / transient** として動作 (対象タグ・タグなしで絞り込み、「編集」のみ)。
+- **ショートカット起動 → ホームへ戻る → 通常アイコンタップで通常モードへ戻る**ことを確認 (純resume に張り付かない)。
+- **通常モードの手動フィルタは維持**され、**ショートカット由来フィルタは通常アイコン起動へ持ち越されない**方針が成立。
+
+### 判断
+
+- 「通常/ショートカット起動と UIモード」「フィルタの由来別永続」の課題は**収束扱い**。
+- `onResume` 推定リセットや `singleTask` への変更に進まずに、task 分離 (中継 Activity + `taskAffinity=""`) で解決できた。
+
+### 残る注意
+
+- `ShortcutEntryActivity` 追加により Activity が1つ増えた (exported)。受け取る extra は `FILTER_TAG_ID` / `SHOW_UNTAGGED_ONLY` に限定。
+- 今後ショートカット用 extra を増やす場合は **ShortcutEntryActivity の転送処理も更新**が必要。
+- 既存ショートカットは**削除・再作成が必要** (移行コードは無し)。
+- ショートカット表示用 MainActivity が別 task として recents に残る可能性 (中継自体は excludeFromRecents)。
+- Launch/UI 診断 (`[LM]`) は当面残してよいが、将来 **DEBUG 限定化 / 整理候補**。
+
+### 次候補
+
+- dogfooding で体感確認を継続 (収束した起動/フィルタ挙動の定着確認)。
+- Launch/UI 診断の DEBUG ガード化 / 整理。
+- (別軸) 通常起動の label 取得コスト調査・表示順改善・DB 系は、指示があれば別タスクで着手。
