@@ -81,6 +81,10 @@ class MainActivity : ComponentActivity() {
     // onNewIntent ごとに +1。filter=null の「明示的な新Intent (通常アイコンタップ等)」を、
     // 初期起動 (seq=0) や単なるタスク復帰 (Intent が来ない) と区別するために使う。
     private val newIntentSeq = mutableStateOf(0)
+    // 初期 onCreate が「通常ランチャーIntent (MAIN/LAUNCHER/filterなし)」だったか。
+    // 実機診断で、通常アイコンタップが onNewIntent ではなく新規 onCreate として届くと判明したため、
+    // これを「明示的な通常アイコン起動」とみなして seq=0 でもフィルタを解除するのに使う。
+    private val initialNormalLauncher = mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -88,12 +92,17 @@ class MainActivity : ComponentActivity() {
         PerfLog.log("MainActivity.onCreate start")
         PerfLog.log("[LM] Activity.onCreate (${describeIntent(intent)})")
         launchFilter.value = parseLaunchFilter(intent)
-        PerfLog.log("[LM] Activity.onCreate parsed launchFilter=${formatLaunchFilter(launchFilter.value)}")
+        initialNormalLauncher.value = isNormalLauncherIntent(intent)
+        PerfLog.log(
+            "[LM] Activity.onCreate parsed launchFilter=${formatLaunchFilter(launchFilter.value)} " +
+                "normalLauncher=${initialNormalLauncher.value}",
+        )
         PerfLog.log("setContent start (launchFilter=${formatLaunchFilter(launchFilter.value)})")
         setContent {
             PixelTagDrawerApp(
                 launchFilter = launchFilter.value,
                 newIntentSeq = newIntentSeq.value,
+                initialNormalLauncher = initialNormalLauncher.value,
             )
         }
     }
@@ -131,6 +140,19 @@ class MainActivity : ComponentActivity() {
             if (tagId >= 0) return LaunchFilter.Tag(tagId)
         }
         return null
+    }
+
+    /**
+     * ホームの通常アプリアイコンから起動された「通常ランチャーIntent」かどうかを判定する。
+     * 実機診断では action=MAIN / category=LAUNCHER / extras=none で、ショートカット用 extras を持たない。
+     * この場合は明示的な通常アイコン起動とみなし、初期 onCreate でもフィルタを解除する。
+     */
+    private fun isNormalLauncherIntent(intent: Intent?): Boolean {
+        intent ?: return false
+        if (intent.action != Intent.ACTION_MAIN) return false
+        if (intent.categories?.contains(Intent.CATEGORY_LAUNCHER) != true) return false
+        // ショートカット用 extras があれば通常ランチャー起動ではない (filter が解釈できる = ショートカット)。
+        return parseLaunchFilter(intent) == null
     }
 
     companion object {
@@ -246,13 +268,21 @@ private fun buildShortcutIcon(context: Context, text: String): Icon {
 }
 
 @Composable
-fun PixelTagDrawerApp(launchFilter: LaunchFilter? = null, newIntentSeq: Int = 0) {
+fun PixelTagDrawerApp(
+    launchFilter: LaunchFilter? = null,
+    newIntentSeq: Int = 0,
+    initialNormalLauncher: Boolean = false,
+) {
     val context = LocalContext.current
     val colorScheme = dynamicLightColorScheme(context)
 
     MaterialTheme(colorScheme = colorScheme) {
         Surface(modifier = Modifier.fillMaxSize()) {
-            AppListScreen(launchFilter = launchFilter, newIntentSeq = newIntentSeq)
+            AppListScreen(
+                launchFilter = launchFilter,
+                newIntentSeq = newIntentSeq,
+                initialNormalLauncher = initialNormalLauncher,
+            )
         }
     }
 }
@@ -263,6 +293,7 @@ fun AppListScreen(
     tagViewModel: TagViewModel = viewModel(),
     launchFilter: LaunchFilter? = null,
     newIntentSeq: Int = 0,
+    initialNormalLauncher: Boolean = false,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val tagState by tagViewModel.uiState.collectAsStateWithLifecycle()
@@ -319,21 +350,23 @@ fun AppListScreen(
     LaunchedEffect(Unit) {
         PerfLog.log(
             "[LM] AppListScreen first compose " +
-                "launchFilter=${formatLaunchFilter(launchFilter)} seq=$newIntentSeq uiMode=$uiMode " +
-                "(reason=initial)",
+                "launchFilter=${formatLaunchFilter(launchFilter)} seq=$newIntentSeq " +
+                "normalLauncher=$initialNormalLauncher uiMode=$uiMode (reason=initial)",
         )
     }
 
     // 起動/新Intent の扱い (newIntentSeq でキーするので onNewIntent ごとに再評価される):
     //  - launchFilter != null: ショートカット起動 → filter 適用 + Simplified に初期化。
-    //  - launchFilter == null かつ newIntentSeq > 0: 明示的な通常アイコンタップ → None に戻し、
+    //  - launchFilter == null かつ newIntentSeq > 0: 明示的な通常アイコンタップ (onNewIntent) → None に戻し、
     //    ショートカット由来の絞り込みを解除する。
-    //  - launchFilter == null かつ newIntentSeq == 0: 初期通常起動 → 何もしない
-    //    (uiMode は初期 None、復元済みフィルタは維持)。単なるタスク復帰は Intent が来ず再評価されない。
+    //  - launchFilter == null かつ seq==0 かつ initialNormalLauncher: 通常アイコンの初期 onCreate 起動
+    //    (実機では通常タップが新規 onCreate=MAIN/LAUNCHER で届く) → None + フィルタ解除。
+    //  - launchFilter == null かつ seq==0 かつ 通常ランチャーでない: プロセス復元等 → 何もしない (状態維持)。
+    //    単なるタスク復帰は onCreate/onNewIntent が来ず、この LaunchedEffect 自体が再評価されない。
     LaunchedEffect(launchFilter, newIntentSeq) {
         PerfLog.log(
             "[LM] LaunchedEffect(launch) enter filter=${formatLaunchFilter(launchFilter)} seq=$newIntentSeq " +
-                "(filter is ${if (launchFilter == null) "null" else "non-null"})",
+                "normalLauncher=$initialNormalLauncher (filter is ${if (launchFilter == null) "null" else "non-null"})",
         )
         when (launchFilter) {
             is LaunchFilter.Tag -> {
@@ -349,14 +382,25 @@ fun AppListScreen(
                 PerfLog.log("[LM] branch=shortcut untagged applied -> uiMode=Simplified (reason=shortcut intent)")
             }
             null -> {
-                if (newIntentSeq > 0) {
-                    // 通常アイコンの明示起動: ショートカット状態を持ち越さず通常モードへ。
-                    uiMode = ShortcutUiMode.None
-                    tagViewModel.clearFilterTags()
-                    foldEditing()
-                    PerfLog.log("[LM] branch=normal new intent reset -> uiMode=None, clearFilterTags (reason=normal intent reset)")
-                } else {
-                    PerfLog.log("[LM] branch=initial normal no-op (seq=0)")
+                when {
+                    newIntentSeq > 0 -> {
+                        // 通常アイコンの明示起動 (onNewIntent 経由): ショートカット状態を持ち越さず通常モードへ。
+                        uiMode = ShortcutUiMode.None
+                        tagViewModel.clearFilterTags()
+                        foldEditing()
+                        PerfLog.log("[LM] branch=normal new intent reset -> uiMode=None, clearFilterTags (reason=normal intent reset)")
+                    }
+                    initialNormalLauncher -> {
+                        // 通常アイコンの明示起動 (新規 onCreate 経由): こちらも通常モードへ戻しフィルタを解除する。
+                        uiMode = ShortcutUiMode.None
+                        tagViewModel.clearFilterTags()
+                        foldEditing()
+                        PerfLog.log("[LM] branch=initial normal launcher reset -> uiMode=None, clearFilterTags (reason=initial normal launcher)")
+                    }
+                    else -> {
+                        // 通常ランチャーでない null 起動 (プロセス復元など): 状態を維持する。
+                        PerfLog.log("[LM] branch=initial normal no-op (seq=0, normalLauncher=false)")
+                    }
                 }
             }
         }
