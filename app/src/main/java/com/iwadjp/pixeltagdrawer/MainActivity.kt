@@ -33,6 +33,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
@@ -704,7 +705,8 @@ fun AppListScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 4.dp, bottom = 4.dp),
+                        .offset(y = (-6).dp)
+                        .padding(top = 0.dp, bottom = 0.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.Start,
                 ) {
@@ -1105,8 +1107,8 @@ private fun TagFilterSection(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 4.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+            .padding(top = 2.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         // タグが多くても固定エリアの高さを抑えるため、横スクロールのチップ列にする
         Row(
