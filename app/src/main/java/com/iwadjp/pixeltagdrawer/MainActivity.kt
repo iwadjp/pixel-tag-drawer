@@ -45,6 +45,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.IconButton
@@ -436,6 +438,7 @@ fun AppListScreen(
     val listState = rememberLazyListState()
     val gridState = rememberLazyGridState()
     var previousScrollSortMode by remember { mutableStateOf<AppSortMode?>(null) }
+    var sortMenuExpanded by remember { mutableStateOf(false) }
 
     // 操作エリア (タイトル/タグ/検索/件数) は固定し、アプリ一覧だけをスクロールさせる。
     // そのため全体は Column、一覧部分のみ weight(1f) を持つ LazyColumn にする。
@@ -744,49 +747,67 @@ fun AppListScreen(
                 }
 
                 // 並び替えセレクタ。簡素表示中は操作を増やさないため隠す (現在の sortMode は適用済み)。
-                // 横が足りなくても見切れないよう横スクロール可能にする。
                 if (!simplified) {
-                    Row(
+                    val sortLabel = when (effectiveSortMode) {
+                        AppSortMode.Name -> "名前順"
+                        AppSortMode.Recent -> "最近起動"
+                        AppSortMode.Count -> "起動回数"
+                    }
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState())
                             .padding(bottom = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        Text(
-                            text = "並び替え",
-                            style = MaterialTheme.typography.labelMedium,
-                        )
-                        FilterChip(
-                            selected = effectiveSortMode == AppSortMode.Name,
-                            onClick = { viewModel.setSortMode(AppSortMode.Name) },
-                            label = { Text("名前順") },
-                        )
-                        FilterChip(
-                            selected = uiState.usageStatsAccessGranted && effectiveSortMode == AppSortMode.Recent,
-                            onClick = { viewModel.setSortMode(AppSortMode.Recent) },
-                            enabled = uiState.usageStatsAccessGranted,
-                            label = { Text("最近起動") },
-                        )
-                        FilterChip(
-                            selected = uiState.usageStatsAccessGranted && effectiveSortMode == AppSortMode.Count,
-                            onClick = { viewModel.setSortMode(AppSortMode.Count) },
-                            enabled = uiState.usageStatsAccessGranted,
-                            label = { Text("起動回数") },
-                        )
+                        TextButton(onClick = { sortMenuExpanded = true }) {
+                            Text("並び替え: $sortLabel ▼")
+                        }
+                        DropdownMenu(
+                            expanded = sortMenuExpanded,
+                            onDismissRequest = { sortMenuExpanded = false },
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("名前順") },
+                                onClick = {
+                                    sortMenuExpanded = false
+                                    viewModel.setSortMode(AppSortMode.Name)
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("最近起動") },
+                                enabled = uiState.usageStatsAccessGranted,
+                                onClick = {
+                                    sortMenuExpanded = false
+                                    viewModel.setSortMode(AppSortMode.Recent)
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("起動回数") },
+                                enabled = uiState.usageStatsAccessGranted,
+                                onClick = {
+                                    sortMenuExpanded = false
+                                    viewModel.setSortMode(AppSortMode.Count)
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        text = "最近起動・起動回数は端末の使用履歴に基づきます。同じパッケージの複数アプリは同じ統計を共有します",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                },
+                                enabled = false,
+                                onClick = {},
+                            )
+                        }
                     }
-                    Text(
-                        text = if (uiState.usageStatsAccessGranted) {
-                            "最近起動・起動回数は端末の使用履歴に基づきます。同じパッケージの複数アプリは同じ統計を共有します"
-                        } else {
-                            "最近起動・起動回数には使用状況へのアクセス許可が必要です"
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(bottom = 4.dp),
-                    )
                     if (!uiState.usageStatsAccessGranted) {
+                        Text(
+                            text = "最近起動・起動回数には使用状況へのアクセス許可が必要です",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(bottom = 4.dp),
+                        )
                         TextButton(
                             onClick = {
                                 PerfLog.log("[USAGE] usage access settings opened")
