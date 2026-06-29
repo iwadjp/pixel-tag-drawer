@@ -318,20 +318,38 @@ class TagViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * 起動Intent指定の単一タグで絞り込む (通常タグフィルタ扱い、タグなしは排他で OFF)。
+     * ショートカット起動指定の単一タグで絞り込む (ショートカット由来・非永続)。
+     * 通常モードの手動フィルタ prefs は上書きしない (通常アイコン再起動で手動フィルタを失わないため)。
      * 存在しない tagId は observeTags の intersect で除外され、フィルタなしに戻る (クラッシュしない)。
      */
-    fun applyLaunchFilterTag(tagId: Long) {
-        PerfLog.log("VM applyLaunchFilterTag tagId=$tagId")
+    fun applyShortcutFilterTag(tagId: Long) {
+        PerfLog.log("VM applyShortcutFilterTag tagId=$tagId (transient)")
         _uiState.update { it.copy(selectedFilterTagIds = setOf(tagId), showUntaggedOnly = false) }
-        prefs.saveFilterTagIds(setOf(tagId))
-        prefs.showUntaggedOnly = false
     }
 
-    /** 起動Intent指定で「タグなし」絞り込みを適用する。 */
-    fun applyLaunchUntaggedFilter() {
-        PerfLog.log("VM applyLaunchUntaggedFilter")
-        setUntaggedFilter(true)
+    /** ショートカット起動指定で「タグなし」絞り込みを適用する (ショートカット由来・非永続)。 */
+    fun applyShortcutUntaggedFilter() {
+        PerfLog.log("VM applyShortcutUntaggedFilter (transient)")
+        _uiState.update { it.copy(showUntaggedOnly = true, selectedFilterTagIds = emptySet()) }
+    }
+
+    /**
+     * 通常アイコン起動時に、保存済みの手動フィルタ (prefs) を state へ復元する。
+     * ショートカット由来の一時フィルタ (非永続) を上書きして消し、通常モードの手動フィルタだけを残す。
+     * prefs は変更しない (手動フィルタの永続値を保持する)。復元ロジックは buildInitialFilterState と同等。
+     */
+    fun restoreManualFilters() {
+        val multi = prefs.multiSelectFilter
+        val saved = prefs.loadFilterTagIds()
+        val ids = if (!multi && saved.size > 1) setOf(saved.first()) else saved
+        PerfLog.log("VM restoreManualFilters tags=${ids.size} untagged=${prefs.showUntaggedOnly}")
+        _uiState.update {
+            it.copy(
+                selectedFilterTagIds = ids,
+                showUntaggedOnly = prefs.showUntaggedOnly,
+                multiSelectFilter = multi,
+            )
+        }
     }
 
     /** タグの名前変更を開始する。既存名を入力欄に入れる。 */

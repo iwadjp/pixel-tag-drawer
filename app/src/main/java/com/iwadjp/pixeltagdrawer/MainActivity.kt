@@ -370,32 +370,34 @@ fun AppListScreen(
         )
         when (launchFilter) {
             is LaunchFilter.Tag -> {
-                tagViewModel.applyLaunchFilterTag(launchFilter.tagId)
+                // ショートカット由来は非永続。通常モードの手動フィルタ prefs を汚さない。
+                tagViewModel.applyShortcutFilterTag(launchFilter.tagId)
                 uiMode = ShortcutUiMode.Simplified
                 foldEditing()
-                PerfLog.log("[LM] branch=shortcut filter applied -> uiMode=Simplified (reason=shortcut intent)")
+                PerfLog.log("[LM] branch=shortcut filter applied -> uiMode=Simplified, transient (reason=shortcut intent)")
             }
             LaunchFilter.Untagged -> {
-                tagViewModel.applyLaunchUntaggedFilter()
+                tagViewModel.applyShortcutUntaggedFilter()
                 uiMode = ShortcutUiMode.Simplified
                 foldEditing()
-                PerfLog.log("[LM] branch=shortcut untagged applied -> uiMode=Simplified (reason=shortcut intent)")
+                PerfLog.log("[LM] branch=shortcut untagged applied -> uiMode=Simplified, transient (reason=shortcut intent)")
             }
             null -> {
                 when {
                     newIntentSeq > 0 -> {
-                        // 通常アイコンの明示起動 (onNewIntent 経由): ショートカット状態を持ち越さず通常モードへ。
+                        // 通常アイコンの明示起動 (onNewIntent 経由): ショートカット一時フィルタを捨て、
+                        // 保存済みの手動フィルタを復元する (手動フィルタは消さない)。
                         uiMode = ShortcutUiMode.None
-                        tagViewModel.clearFilterTags()
+                        tagViewModel.restoreManualFilters()
                         foldEditing()
-                        PerfLog.log("[LM] branch=normal new intent reset -> uiMode=None, clearFilterTags (reason=normal intent reset)")
+                        PerfLog.log("[LM] branch=normal new intent reset -> uiMode=None, restoreManualFilters (reason=normal intent reset)")
                     }
                     initialNormalLauncher -> {
-                        // 通常アイコンの明示起動 (新規 onCreate 経由): こちらも通常モードへ戻しフィルタを解除する。
+                        // 通常アイコンの明示起動 (新規 onCreate 経由): こちらも手動フィルタを復元する。
                         uiMode = ShortcutUiMode.None
-                        tagViewModel.clearFilterTags()
+                        tagViewModel.restoreManualFilters()
                         foldEditing()
-                        PerfLog.log("[LM] branch=initial normal launcher reset -> uiMode=None, clearFilterTags (reason=initial normal launcher)")
+                        PerfLog.log("[LM] branch=initial normal launcher reset -> uiMode=None, restoreManualFilters (reason=initial normal launcher)")
                     }
                     else -> {
                         // 通常ランチャーでない null 起動 (プロセス復元など): 状態を維持する。
