@@ -11,6 +11,7 @@ import android.graphics.Paint
 import android.graphics.Typeface
 import android.graphics.drawable.Icon
 import android.os.Bundle
+import android.provider.Settings
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -35,9 +36,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items as gridItems
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -52,6 +55,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -67,6 +71,9 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.iwadjp.pixeltagdrawer.data.AppPreferences
@@ -304,7 +311,17 @@ fun AppListScreen(
 
     // 表示状態の最小永続化。前回の表示モード / タグ管理の開閉を復元する。
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val prefs = remember(context) { AppPreferences(context) }
+    DisposableEffect(lifecycleOwner, viewModel) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                viewModel.refreshUsageStats()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     // ホーム画面ショートカット作成リクエストの結果メッセージ (タグ管理内に表示)。
     var shortcutMessage by remember { mutableStateOf<String?>(null) }
@@ -416,6 +433,9 @@ fun AppListScreen(
     // 一覧の最終要素がナビゲーションバーに隠れないよう、その分を一覧下端の余白に加える。
     // 固定エリアには付けず、スクロール領域 (List/Grid) の contentPadding だけに効かせる。
     val navBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val listState = rememberLazyListState()
+    val gridState = rememberLazyGridState()
+    var previousScrollSortMode by remember { mutableStateOf<AppSortMode?>(null) }
 
     // 操作エリア (タイトル/タグ/検索/件数) は固定し、アプリ一覧だけをスクロールさせる。
     // そのため全体は Column、一覧部分のみ weight(1f) を持つ LazyColumn にする。
@@ -580,9 +600,24 @@ fun AppListScreen(
         // 「タグなし」は未付与アプリのみ。通常タグ選択時は全タグを持つアプリのみ。両者は排他。
         // 並び替えは検索・タグ絞り込み後の最終リストに効く (簡素モードでも現在の sortMode が効く)。
         val searchFilteredApps = uiState.filteredApps
-        val launchStatsKey = remember(searchFilteredApps) {
+        val effectiveSortMode = remember(uiState.sortMode, uiState.usageStatsAccessGranted) {
+            if (uiState.usageStatsAccessGranted || uiState.sortMode == AppSortMode.Name) {
+                uiState.sortMode
+            } else {
+                AppSortMode.Name
+            }
+        }
+        LaunchedEffect(effectiveSortMode) {
+            val previous = previousScrollSortMode
+            previousScrollSortMode = effectiveSortMode
+            if (previous != null && previous != effectiveSortMode) {
+                listState.scrollToItem(0)
+                gridState.scrollToItem(0)
+            }
+        }
+        val usageStatsKey = remember(searchFilteredApps) {
             searchFilteredApps.joinToString(separator = "|") { app ->
-                "${app.packageName}/${app.className}:${app.launchCount}:${app.lastLaunchedAt}"
+                "${app.packageName}/${app.className}:${app.usageLaunchCount}:${app.usageLastUsedAt}"
             }
         }
         val sortedApps = remember(
@@ -590,8 +625,8 @@ fun AppListScreen(
             tagState.selectedFilterTagIds,
             tagState.showUntaggedOnly,
             tagState.appTagMap,
-            uiState.sortMode,
-            launchStatsKey,
+            effectiveSortMode,
+            usageStatsKey,
         ) {
             val selected = tagState.selectedFilterTagIds
             val tagFiltered = when {
@@ -605,16 +640,16 @@ fun AppListScreen(
                     appTags.containsAll(selected)
                 }
             }
-            sortApps(tagFiltered, uiState.sortMode)
+            sortApps(tagFiltered, effectiveSortMode)
         }
-        LaunchedEffect(uiState.sortMode, sortedApps, simplified) {
+        LaunchedEffect(effectiveSortMode, sortedApps, simplified) {
             val first = sortedApps.firstOrNull()
             PerfLog.log(
-                "[SORT] sort result mode=${uiState.sortMode.prefValue} " +
+                "[SORT] sort result mode=${effectiveSortMode.prefValue} " +
                     "count=${sortedApps.size} " +
-                    "nonZero=${sortedApps.count { it.launchCount > 0 || it.lastLaunchedAt > 0L }} " +
+                    "nonZero=${sortedApps.count { it.usageLaunchCount > 0 || it.usageLastUsedAt > 0L }} " +
                     "simplified=$simplified " +
-                    "top=${first?.label?.take(24)}:${first?.launchCount}:${first?.lastLaunchedAt}",
+                    "top=${first?.label?.take(24)}:${first?.usageLaunchCount}:${first?.usageLastUsedAt}",
             )
         }
 
@@ -724,20 +759,43 @@ fun AppListScreen(
                             style = MaterialTheme.typography.labelMedium,
                         )
                         FilterChip(
-                            selected = uiState.sortMode == AppSortMode.Name,
+                            selected = effectiveSortMode == AppSortMode.Name,
                             onClick = { viewModel.setSortMode(AppSortMode.Name) },
                             label = { Text("名前順") },
                         )
                         FilterChip(
-                            selected = uiState.sortMode == AppSortMode.Recent,
+                            selected = uiState.usageStatsAccessGranted && effectiveSortMode == AppSortMode.Recent,
                             onClick = { viewModel.setSortMode(AppSortMode.Recent) },
+                            enabled = uiState.usageStatsAccessGranted,
                             label = { Text("最近起動") },
                         )
                         FilterChip(
-                            selected = uiState.sortMode == AppSortMode.Count,
+                            selected = uiState.usageStatsAccessGranted && effectiveSortMode == AppSortMode.Count,
                             onClick = { viewModel.setSortMode(AppSortMode.Count) },
+                            enabled = uiState.usageStatsAccessGranted,
                             label = { Text("起動回数") },
                         )
+                    }
+                    Text(
+                        text = if (uiState.usageStatsAccessGranted) {
+                            "最近起動・起動回数は端末の使用履歴に基づきます。同じパッケージの複数アプリは同じ統計を共有します"
+                        } else {
+                            "最近起動・起動回数には使用状況へのアクセス許可が必要です"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = 4.dp),
+                    )
+                    if (!uiState.usageStatsAccessGranted) {
+                        TextButton(
+                            onClick = {
+                                PerfLog.log("[USAGE] usage access settings opened")
+                                context.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
+                            },
+                            modifier = Modifier.padding(bottom = 4.dp),
+                        ) {
+                            Text("使用状況へのアクセス設定を開く")
+                        }
                     }
                 }
 
@@ -778,6 +836,7 @@ fun AppListScreen(
                 when (displayMode) {
                     AppDisplayMode.List -> {
                         LazyColumn(
+                            state = listState,
                             modifier = Modifier.weight(1f),
                             contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = navBarPadding + 24.dp),
                             verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -819,6 +878,7 @@ fun AppListScreen(
                     AppDisplayMode.Grid -> {
                         LazyVerticalGrid(
                             columns = GridCells.Fixed(4),
+                            state = gridState,
                             modifier = Modifier.weight(1f),
                             contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = navBarPadding + 24.dp),
                             horizontalArrangement = Arrangement.spacedBy(8.dp),

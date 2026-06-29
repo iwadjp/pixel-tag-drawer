@@ -14,6 +14,7 @@ data class AppListUiState(
     val query: String = "",
     val errorMessage: String? = null,
     val sortMode: AppSortMode = AppSortMode.Name,
+    val usageStatsAccessGranted: Boolean = false,
 ) {
     /** app label または packageName に query を含むアプリ (大文字小文字を区別しない)。 */
     val filteredApps: List<LauncherApp>

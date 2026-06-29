@@ -89,12 +89,72 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
                 }
 
                 // icon は初期表示後に後追いロードして該当アプリへ反映する。
+                mergeUsageStats(generation)
                 loadIcons(list, generation)
             } catch (e: Exception) {
                 _uiState.update {
                     it.copy(isLoading = false, errorMessage = "アプリ一覧の読み込みに失敗しました")
                 }
             }
+        }
+    }
+
+    fun refreshUsageStats() {
+        val generation = loadGeneration
+        viewModelScope.launch {
+            mergeUsageStats(generation)
+        }
+    }
+
+    private suspend fun mergeUsageStats(generation: Int) {
+        val granted = withContext(Dispatchers.IO) { repository.hasUsageStatsAccess() }
+        PerfLog.log("[USAGE] usage access granted=$granted")
+        if (generation != loadGeneration) return
+
+        if (!granted) {
+            var fallbackSortToName = false
+            _uiState.update { state ->
+                val nextSortMode = if (state.sortMode != AppSortMode.Name) {
+                    fallbackSortToName = true
+                    AppSortMode.Name
+                } else {
+                    state.sortMode
+                }
+                state.copy(
+                    usageStatsAccessGranted = false,
+                    sortMode = nextSortMode,
+                    apps = state.apps.map {
+                        if (it.usageLaunchCount != 0 || it.usageLastUsedAt != 0L) {
+                            it.copy(usageLaunchCount = 0, usageLastUsedAt = 0L)
+                        } else {
+                            it
+                        }
+                    },
+                )
+            }
+            if (fallbackSortToName) {
+                prefs.appSortMode = AppSortMode.Name.prefValue
+                PerfLog.log("[USAGE] sort mode fallback mode=name reason=usage_access_missing")
+            }
+            return
+        }
+
+        val usageStats = withContext(Dispatchers.IO) { repository.loadUsageStats() }
+        if (generation != loadGeneration) return
+        _uiState.update { state ->
+            val mergedApps = state.apps.map { app ->
+                val usage = usageStats[app.packageName]
+                app.copy(
+                    usageLaunchCount = usage?.launchCount ?: 0,
+                    usageLastUsedAt = usage?.lastUsedAt ?: 0L,
+                )
+            }
+            PerfLog.log(
+                "[USAGE] usage stats loaded packages=${usageStats.size} " +
+                    "nonZeroRecent=${mergedApps.count { it.usageLastUsedAt > 0L }} " +
+                    "nonZeroCount=${mergedApps.count { it.usageLaunchCount > 0 }}",
+            )
+            state.copy(usageStatsAccessGranted = true, apps = mergedApps)
         }
     }
 
@@ -235,6 +295,14 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
 
     /** 並び順を変更し永続化する。同じ値なら何もしない。 */
     fun setSortMode(mode: AppSortMode) {
+        if (mode != AppSortMode.Name && !_uiState.value.usageStatsAccessGranted) {
+            if (_uiState.value.sortMode != AppSortMode.Name) {
+                _uiState.update { it.copy(sortMode = AppSortMode.Name) }
+                prefs.appSortMode = AppSortMode.Name.prefValue
+            }
+            PerfLog.log("[USAGE] sort mode blocked mode=${mode.prefValue} reason=usage_access_missing")
+            return
+        }
         if (_uiState.value.sortMode == mode) return
         _uiState.update { it.copy(sortMode = mode) }
         prefs.appSortMode = mode.prefValue

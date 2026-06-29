@@ -1,5 +1,8 @@
 package com.iwadjp.pixeltagdrawer.data
 
+import android.app.AppOpsManager
+import android.app.usage.UsageEvents
+import android.app.usage.UsageStatsManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -7,6 +10,8 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
+import android.os.Build
+import android.os.Process
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import com.iwadjp.pixeltagdrawer.PerfLog
@@ -22,6 +27,55 @@ class AppRepository(private val context: Context) {
 
     private val launcherAppDao by lazy {
         PixelTagDrawerDatabase.getInstance(context).launcherAppDao()
+    }
+
+    @Suppress("DEPRECATION")
+    fun hasUsageStatsAccess(): Boolean {
+        val appOps = context.getSystemService(AppOpsManager::class.java) ?: return false
+        val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            appOps.unsafeCheckOpNoThrow(
+                AppOpsManager.OPSTR_GET_USAGE_STATS,
+                Process.myUid(),
+                context.packageName,
+            )
+        } else {
+            appOps.checkOpNoThrow(
+                AppOpsManager.OPSTR_GET_USAGE_STATS,
+                Process.myUid(),
+                context.packageName,
+            )
+        }
+        return mode == AppOpsManager.MODE_ALLOWED
+    }
+
+    fun loadUsageStats(days: Int = USAGE_STATS_DAYS): Map<String, AppUsageStats> {
+        val usageStatsManager = context.getSystemService(UsageStatsManager::class.java) ?: return emptyMap()
+        val end = System.currentTimeMillis()
+        val start = end - days * 24L * 60L * 60L * 1000L
+        val result = mutableMapOf<String, AppUsageStats>()
+
+        usageStatsManager.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, start, end)
+            ?.forEach { stat ->
+                if (stat.packageName.isNullOrBlank()) return@forEach
+                val current = result[stat.packageName] ?: AppUsageStats()
+                result[stat.packageName] = current.copy(
+                    lastUsedAt = maxOf(current.lastUsedAt, stat.lastTimeUsed),
+                )
+            }
+
+        val events = usageStatsManager.queryEvents(start, end)
+        val event = UsageEvents.Event()
+        while (events.hasNextEvent()) {
+            events.getNextEvent(event)
+            if (event.packageName.isNullOrBlank() || !event.isForegroundEvent()) continue
+            val current = result[event.packageName] ?: AppUsageStats()
+            result[event.packageName] = current.copy(
+                launchCount = current.launchCount + 1,
+                lastUsedAt = maxOf(current.lastUsedAt, event.timeStamp),
+            )
+        }
+
+        return result
     }
 
     /**
@@ -141,5 +195,17 @@ class AppRepository(private val context: Context) {
     private companion object {
         // intrinsicサイズが取れないDrawable用のフォールバック解像度(px)。
         const val ICON_FALLBACK_PX = 96
+        const val USAGE_STATS_DAYS = 30
     }
+}
+
+data class AppUsageStats(
+    val launchCount: Int = 0,
+    val lastUsedAt: Long = 0,
+)
+
+@Suppress("DEPRECATION")
+private fun UsageEvents.Event.isForegroundEvent(): Boolean {
+    return eventType == UsageEvents.Event.MOVE_TO_FOREGROUND ||
+        (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && eventType == UsageEvents.Event.ACTIVITY_RESUMED)
 }
