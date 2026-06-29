@@ -579,26 +579,41 @@ fun AppListScreen(
         // 検索 (名前/パッケージ) で絞った結果に、タグ条件をANDで合成し、最後に並び順を適用する。
         // 「タグなし」は未付与アプリのみ。通常タグ選択時は全タグを持つアプリのみ。両者は排他。
         // 並び替えは検索・タグ絞り込み後の最終リストに効く (簡素モードでも現在の sortMode が効く)。
-        val filteredApps = remember(
-            uiState.filteredApps,
+        val searchFilteredApps = uiState.filteredApps
+        val launchStatsKey = remember(searchFilteredApps) {
+            searchFilteredApps.joinToString(separator = "|") { app ->
+                "${app.packageName}/${app.className}:${app.launchCount}:${app.lastLaunchedAt}"
+            }
+        }
+        val sortedApps = remember(
+            searchFilteredApps,
             tagState.selectedFilterTagIds,
             tagState.showUntaggedOnly,
             tagState.appTagMap,
             uiState.sortMode,
+            launchStatsKey,
         ) {
             val selected = tagState.selectedFilterTagIds
             val tagFiltered = when {
-                tagState.showUntaggedOnly -> uiState.filteredApps.filter { app ->
+                tagState.showUntaggedOnly -> searchFilteredApps.filter { app ->
                     tagState.appTagMap["${app.packageName}/${app.className}"].isNullOrEmpty()
                 }
-                selected.isEmpty() -> uiState.filteredApps
-                else -> uiState.filteredApps.filter { app ->
+                selected.isEmpty() -> searchFilteredApps
+                else -> searchFilteredApps.filter { app ->
                     val appTags = tagState.appTagMap["${app.packageName}/${app.className}"]
                         ?: emptySet()
                     appTags.containsAll(selected)
                 }
             }
             sortApps(tagFiltered, uiState.sortMode)
+        }
+        LaunchedEffect(uiState.sortMode) {
+            val first = sortedApps.firstOrNull()
+            PerfLog.log(
+                "sorted list first item mode=${uiState.sortMode.prefValue} " +
+                    "first=${first?.packageName}/${first?.className} " +
+                    "count=${first?.launchCount} last=${first?.lastLaunchedAt}",
+            )
         }
 
         // tagId -> タグ名。アプリ行に付与済みタグ名を表示するために使う。
@@ -609,10 +624,10 @@ fun AppListScreen(
         // 調査用: アプリ読込完了後の初回 filteredApps を1回だけ計測する。
         // 0件 (例: タグなし絞り込みで該当なし) でも記録できるよう、空判定ではなく apps 読込で判定する。
         val perfFirstListLogged = remember { mutableStateOf(false) }
-        LaunchedEffect(uiState.apps.isNotEmpty(), filteredApps) {
+        LaunchedEffect(uiState.apps.isNotEmpty(), sortedApps) {
             if (!perfFirstListLogged.value && uiState.apps.isNotEmpty()) {
                 perfFirstListLogged.value = true
-                PerfLog.log("first visible filtered list count=${filteredApps.size}")
+                PerfLog.log("first visible filtered list count=${sortedApps.size}")
             }
         }
 
@@ -635,7 +650,7 @@ fun AppListScreen(
                 )
             }
 
-            filteredApps.isEmpty() -> {
+            sortedApps.isEmpty() -> {
                 Text(
                     text = "一致するアプリがありません",
                     style = MaterialTheme.typography.bodyMedium,
@@ -658,7 +673,7 @@ fun AppListScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         Text(
-                            text = "${filteredApps.size} 件",
+                            text = "${sortedApps.size} 件",
                             style = MaterialTheme.typography.labelMedium,
                         )
                         // タグ編集モード切替。簡素表示中は出さない。OFF で一括選択も閉じる
@@ -766,7 +781,7 @@ fun AppListScreen(
                             verticalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
                             items(
-                                items = filteredApps,
+                                items = sortedApps,
                                 key = { "${it.packageName}/${it.className}" },
                             ) { app ->
                                 // このアプリに付与済みのタグ名 (名前順)。未付与なら空。
@@ -808,7 +823,7 @@ fun AppListScreen(
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
                             gridItems(
-                                items = filteredApps,
+                                items = sortedApps,
                                 key = { "${it.packageName}/${it.className}" },
                             ) { app ->
                                 val key = "${app.packageName}/${app.className}"
