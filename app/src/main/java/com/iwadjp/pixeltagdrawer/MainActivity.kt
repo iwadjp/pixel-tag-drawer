@@ -78,6 +78,9 @@ class MainActivity : ComponentActivity() {
 
     // 起動Intentで指定されたタグフィルタ。onCreate / onNewIntent で更新する。
     private val launchFilter = mutableStateOf<LaunchFilter?>(null)
+    // onNewIntent ごとに +1。filter=null の「明示的な新Intent (通常アイコンタップ等)」を、
+    // 初期起動 (seq=0) や単なるタスク復帰 (Intent が来ない) と区別するために使う。
+    private val newIntentSeq = mutableStateOf(0)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -86,7 +89,10 @@ class MainActivity : ComponentActivity() {
         launchFilter.value = parseLaunchFilter(intent)
         PerfLog.log("setContent start (launchFilter=${formatLaunchFilter(launchFilter.value)})")
         setContent {
-            PixelTagDrawerApp(launchFilter = launchFilter.value)
+            PixelTagDrawerApp(
+                launchFilter = launchFilter.value,
+                newIntentSeq = newIntentSeq.value,
+            )
         }
     }
 
@@ -95,6 +101,7 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         launchFilter.value = parseLaunchFilter(intent)
+        newIntentSeq.value = newIntentSeq.value + 1
     }
 
     /** 起動Intent extras を解釈する。タグなし指定を優先。指定が無ければ null。 */
@@ -204,13 +211,13 @@ private fun buildShortcutIcon(context: Context, text: String): Icon {
 }
 
 @Composable
-fun PixelTagDrawerApp(launchFilter: LaunchFilter? = null) {
+fun PixelTagDrawerApp(launchFilter: LaunchFilter? = null, newIntentSeq: Int = 0) {
     val context = LocalContext.current
     val colorScheme = dynamicLightColorScheme(context)
 
     MaterialTheme(colorScheme = colorScheme) {
         Surface(modifier = Modifier.fillMaxSize()) {
-            AppListScreen(launchFilter = launchFilter)
+            AppListScreen(launchFilter = launchFilter, newIntentSeq = newIntentSeq)
         }
     }
 }
@@ -220,6 +227,7 @@ fun AppListScreen(
     viewModel: AppListViewModel = viewModel(),
     tagViewModel: TagViewModel = viewModel(),
     launchFilter: LaunchFilter? = null,
+    newIntentSeq: Int = 0,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val tagState by tagViewModel.uiState.collectAsStateWithLifecycle()
@@ -264,23 +272,42 @@ fun AppListScreen(
     // 簡素モード (編集系UIを隠す) かどうか。表示条件はすべてこのモードに基づき一意に決める。
     val simplified = uiMode == ShortcutUiMode.Simplified
 
-    // 起動Intentにフィルタがある時だけ適用し、簡素モードに初期化する。
-    // フィルタが無い (通常Intent/タスク復帰) 場合は現在のモード・フィルタを保持し、勝手に解除しない。
-    LaunchedEffect(launchFilter) {
+    // モード遷移時に編集系の一時stateを畳む共通処理 (フィルタ・検索は触らない)。
+    val foldEditing: () -> Unit = {
+        tagEditMode = false
+        selectedBulkApps = emptySet()
+        bulkTargetTagId = null
+        tagViewModel.clearSelectedApp()
+    }
+
+    // 起動/新Intent の扱い (newIntentSeq でキーするので onNewIntent ごとに再評価される):
+    //  - launchFilter != null: ショートカット起動 → filter 適用 + Simplified に初期化。
+    //  - launchFilter == null かつ newIntentSeq > 0: 明示的な通常アイコンタップ → None に戻し、
+    //    ショートカット由来の絞り込みを解除する。
+    //  - launchFilter == null かつ newIntentSeq == 0: 初期通常起動 → 何もしない
+    //    (uiMode は初期 None、復元済みフィルタは維持)。単なるタスク復帰は Intent が来ず再評価されない。
+    LaunchedEffect(launchFilter, newIntentSeq) {
         when (launchFilter) {
-            is LaunchFilter.Tag -> tagViewModel.applyLaunchFilterTag(launchFilter.tagId)
-            LaunchFilter.Untagged -> tagViewModel.applyLaunchUntaggedFilter()
-            null -> Unit
+            is LaunchFilter.Tag -> {
+                tagViewModel.applyLaunchFilterTag(launchFilter.tagId)
+                uiMode = ShortcutUiMode.Simplified
+                foldEditing()
+            }
+            LaunchFilter.Untagged -> {
+                tagViewModel.applyLaunchUntaggedFilter()
+                uiMode = ShortcutUiMode.Simplified
+                foldEditing()
+            }
+            null -> {
+                if (newIntentSeq > 0) {
+                    // 通常アイコンの明示起動: ショートカット状態を持ち越さず通常モードへ。
+                    uiMode = ShortcutUiMode.None
+                    tagViewModel.clearFilterTags()
+                    foldEditing()
+                }
+            }
         }
-        if (launchFilter != null) {
-            // ショートカット起動/新Intent時のみ簡素モードに初期化し、編集系の残留状態を畳む。
-            uiMode = ShortcutUiMode.Simplified
-            tagEditMode = false
-            selectedBulkApps = emptySet()
-            bulkTargetTagId = null
-            tagViewModel.clearSelectedApp()
-        }
-        PerfLog.log("launch filter applied (filter=${formatLaunchFilter(launchFilter)}, mode=$uiMode)")
+        PerfLog.log("launch filter applied (filter=${formatLaunchFilter(launchFilter)}, seq=$newIntentSeq, mode=$uiMode)")
     }
 
     // 一覧の最終要素がナビゲーションバーに隠れないよう、その分を一覧下端の余白に加える。
