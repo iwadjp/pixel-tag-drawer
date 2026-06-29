@@ -90,8 +90,9 @@ class AppRepository(private val context: Context) {
     }
 
     /**
-     * 取得した起動可能アプリ一覧を launcher_apps テーブルへ同期 (upsert) する。
-     * 取得できたものは isInstalled=true、lastSeenAt=同期時刻で保存する。
+     * 取得した起動可能アプリ一覧を launcher_apps テーブルへ同期する。
+     * 取得できたものは isInstalled=true、lastSeenAt=同期時刻で更新する。
+     * 起動履歴 (launchCount / lastLaunchedAt) は **上書きしない** (upsertAllSeen が保持する)。
      * 消えたアプリを false にする処理は後続。表示とは独立で、呼び出し側で失敗を握る。
      */
     suspend fun syncLaunchableApps(apps: List<LauncherApp>) {
@@ -105,7 +106,25 @@ class AppRepository(private val context: Context) {
                 lastSeenAt = now,
             )
         }
-        launcherAppDao.upsertAll(entities)
+        launcherAppDao.upsertAllSeen(entities, now)
+    }
+
+    /**
+     * pixel-tag-drawer 内でのアプリ起動を1件記録する (launchCount +1 / lastLaunchedAt 更新)。
+     * 並び替え (最近起動順 / 起動回数順) に使う。失敗は呼び出し側で握る。
+     */
+    suspend fun recordLaunch(packageName: String, className: String) {
+        launcherAppDao.recordLaunch(packageName, className, System.currentTimeMillis())
+    }
+
+    /**
+     * 起動履歴を "packageName/className" -> (launchCount, lastLaunchedAt) で読み込む。
+     * 一覧へ後追いマージして並び替えに使う。未起動/未登録は呼び出し側で 0 扱い。
+     */
+    suspend fun loadLaunchStats(): Map<String, Pair<Int, Long>> {
+        return launcherAppDao.getAll().associate { entity ->
+            "${entity.packageName}/${entity.className}" to (entity.launchCount to entity.lastLaunchedAt)
+        }
     }
 
     /**

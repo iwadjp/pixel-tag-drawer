@@ -14,4 +14,7 @@ data class LauncherApp(
     val packageName: String,
     val className: String,
     val icon: ImageBitmap? = null,
+    // pixel-tag-drawer 内での起動履歴 (並び替え用)。DBから後追いマージする。未起動は 0。
+    val launchCount: Int = 0,
+    val lastLaunchedAt: Long = 0,
 )

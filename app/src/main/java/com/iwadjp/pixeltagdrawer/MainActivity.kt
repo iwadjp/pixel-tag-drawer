@@ -72,7 +72,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.iwadjp.pixeltagdrawer.data.AppPreferences
 import com.iwadjp.pixeltagdrawer.model.LauncherApp
 import com.iwadjp.pixeltagdrawer.ui.AppListViewModel
+import com.iwadjp.pixeltagdrawer.ui.AppSortMode
 import com.iwadjp.pixeltagdrawer.ui.TagViewModel
+import com.iwadjp.pixeltagdrawer.ui.sortApps
 
 class MainActivity : ComponentActivity() {
 
@@ -574,16 +576,18 @@ fun AppListScreen(
             )
         }
 
-        // 検索 (名前/パッケージ) で絞った結果に、タグ条件をANDで合成する。
+        // 検索 (名前/パッケージ) で絞った結果に、タグ条件をANDで合成し、最後に並び順を適用する。
         // 「タグなし」は未付与アプリのみ。通常タグ選択時は全タグを持つアプリのみ。両者は排他。
+        // 並び替えは検索・タグ絞り込み後の最終リストに効く (簡素モードでも現在の sortMode が効く)。
         val filteredApps = remember(
             uiState.filteredApps,
             tagState.selectedFilterTagIds,
             tagState.showUntaggedOnly,
             tagState.appTagMap,
+            uiState.sortMode,
         ) {
             val selected = tagState.selectedFilterTagIds
-            when {
+            val tagFiltered = when {
                 tagState.showUntaggedOnly -> uiState.filteredApps.filter { app ->
                     tagState.appTagMap["${app.packageName}/${app.className}"].isNullOrEmpty()
                 }
@@ -594,6 +598,7 @@ fun AppListScreen(
                     appTags.containsAll(selected)
                 }
             }
+            sortApps(tagFiltered, uiState.sortMode)
         }
 
         // tagId -> タグ名。アプリ行に付与済みタグ名を表示するために使う。
@@ -682,6 +687,39 @@ fun AppListScreen(
                             selected = displayMode == AppDisplayMode.Grid,
                             onClick = { displayMode = AppDisplayMode.Grid },
                             label = { Text("アイコン") },
+                        )
+                    }
+                }
+
+                // 並び替えセレクタ。簡素表示中は操作を増やさないため隠す (現在の sortMode は適用済み)。
+                // 横が足りなくても見切れないよう横スクロール可能にする。
+                if (!simplified) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState())
+                            .padding(bottom = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
+                            text = "並び替え",
+                            style = MaterialTheme.typography.labelMedium,
+                        )
+                        FilterChip(
+                            selected = uiState.sortMode == AppSortMode.Name,
+                            onClick = { viewModel.setSortMode(AppSortMode.Name) },
+                            label = { Text("名前順") },
+                        )
+                        FilterChip(
+                            selected = uiState.sortMode == AppSortMode.Recent,
+                            onClick = { viewModel.setSortMode(AppSortMode.Recent) },
+                            label = { Text("最近起動") },
+                        )
+                        FilterChip(
+                            selected = uiState.sortMode == AppSortMode.Count,
+                            onClick = { viewModel.setSortMode(AppSortMode.Count) },
+                            label = { Text("起動回数") },
                         )
                     }
                 }

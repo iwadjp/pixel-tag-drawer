@@ -13,6 +13,7 @@ data class AppListUiState(
     val apps: List<LauncherApp> = emptyList(),
     val query: String = "",
     val errorMessage: String? = null,
+    val sortMode: AppSortMode = AppSortMode.Name,
 ) {
     /** app label または packageName に query を含むアプリ (大文字小文字を区別しない)。 */
     val filteredApps: List<LauncherApp>

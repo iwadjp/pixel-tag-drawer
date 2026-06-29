@@ -59,6 +59,16 @@ class AppPreferences(context: Context) {
         prefs.edit().putString(KEY_FILTER_TAG_IDS, ids.joinToString(",")).apply()
     }
 
+    /**
+     * アプリ一覧の並び順 (name / recent / count)。未保存/不正値は name。
+     * 値は AppSortMode.prefValue と対応する。
+     */
+    var appSortMode: String
+        get() = prefs.getString(KEY_APP_SORT_MODE, SORT_NAME).orEmpty().ifEmpty { SORT_NAME }
+        set(value) {
+            prefs.edit().putString(KEY_APP_SORT_MODE, value).apply()
+        }
+
     private companion object {
         const val PREFS_NAME = "pixel_tag_drawer_prefs"
         const val KEY_DISPLAY_MODE = "display_mode"
@@ -66,7 +76,9 @@ class AppPreferences(context: Context) {
         const val KEY_SHOW_UNTAGGED_ONLY = "show_untagged_only"
         const val KEY_MULTI_SELECT_FILTER = "multi_select_filter"
         const val KEY_FILTER_TAG_IDS = "selected_filter_tag_ids"
+        const val KEY_APP_SORT_MODE = "app_sort_mode"
         const val DISPLAY_LIST = "list"
         const val DISPLAY_GRID = "grid"
+        const val SORT_NAME = "name"
     }
 }

@@ -4,11 +4,12 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 
 /**
- * タグDBの土台。launcher_apps / tags / app_tags を保持する。
- * version = 1、exportSchema は当面 false。
- * 今回は土台のみで、既存のアプリ一覧取得・表示はDBへ未接続。
+ * タグDB。launcher_apps / tags / app_tags を保持する。
+ * version = 2 (launcher_apps に起動履歴 launchCount / lastLaunchedAt を追加)。
  */
 @Database(
     entities = [
@@ -16,7 +17,7 @@ import androidx.room.RoomDatabase
         TagEntity::class,
         AppTagCrossRef::class,
     ],
-    version = 1,
+    version = 2,
     exportSchema = false,
 )
 abstract class PixelTagDrawerDatabase : RoomDatabase() {
@@ -28,6 +29,17 @@ abstract class PixelTagDrawerDatabase : RoomDatabase() {
     companion object {
         private const val DB_NAME = "pixel_tag_drawer.db"
 
+        /**
+         * v1→v2: launcher_apps に起動履歴カラムを追加する。
+         * 既存行は launchCount=0 / lastLaunchedAt=0。既存データは保持する。
+         */
+        private val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE launcher_apps ADD COLUMN launchCount INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE launcher_apps ADD COLUMN lastLaunchedAt INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
         @Volatile
         private var instance: PixelTagDrawerDatabase? = null
 
@@ -37,7 +49,7 @@ abstract class PixelTagDrawerDatabase : RoomDatabase() {
                     context.applicationContext,
                     PixelTagDrawerDatabase::class.java,
                     DB_NAME,
-                ).build().also { instance = it }
+                ).addMigrations(MIGRATION_1_2).build().also { instance = it }
             }
         }
     }

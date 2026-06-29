@@ -6,6 +6,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.iwadjp.pixeltagdrawer.PerfLog
+import com.iwadjp.pixeltagdrawer.data.AppPreferences
 import com.iwadjp.pixeltagdrawer.data.AppRepository
 import com.iwadjp.pixeltagdrawer.model.LauncherApp
 import kotlinx.coroutines.Dispatchers
@@ -23,8 +24,11 @@ import kotlinx.coroutines.withContext
 class AppListViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository = AppRepository(application)
+    private val prefs = AppPreferences(application)
 
-    private val _uiState = MutableStateFlow(AppListUiState(isLoading = true))
+    private val _uiState = MutableStateFlow(
+        AppListUiState(isLoading = true, sortMode = AppSortMode.fromPrefValue(prefs.appSortMode)),
+    )
     val uiState: StateFlow<AppListUiState> = _uiState.asStateFlow()
 
     // refresh() の世代。icon 後追いロードが古い世代の結果を反映しないためのガード。
@@ -53,6 +57,28 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
                     PerfLog.log("db sync end")
                 } catch (e: Exception) {
                     Log.w(TAG, "launcher_apps への同期に失敗しました", e)
+                }
+
+                // 起動履歴を後追いマージする (並び替え用)。初期表示は名前順なら統計不要なので速いまま。
+                // 失敗しても一覧表示は壊さない。古い世代の結果は反映しない。
+                try {
+                    val stats = withContext(Dispatchers.IO) { repository.loadLaunchStats() }
+                    if (generation == loadGeneration) {
+                        _uiState.update { state ->
+                            state.copy(
+                                apps = state.apps.map { app ->
+                                    val s = stats["${app.packageName}/${app.className}"]
+                                    if (s != null && (app.launchCount != s.first || app.lastLaunchedAt != s.second)) {
+                                        app.copy(launchCount = s.first, lastLaunchedAt = s.second)
+                                    } else {
+                                        app
+                                    }
+                                },
+                            )
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "起動履歴の読み込みに失敗しました", e)
                 }
 
                 // icon は初期表示後に後追いロードして該当アプリへ反映する。
@@ -127,11 +153,49 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
         try {
             context.startActivity(repository.buildLaunchIntent(app))
             _uiState.update { it.copy(errorMessage = null) }
+            // 起動できた時だけ履歴を更新する (通常モード/簡素モードどちらの起動も対象)。
+            recordLaunch(app)
         } catch (e: Exception) {
             _uiState.update {
                 it.copy(errorMessage = "起動に失敗しました: ${app.label} (${app.packageName})")
             }
         }
+    }
+
+    /**
+     * アプリ起動を履歴に記録する。
+     * 並び替えへ即反映するためメモリ上の統計をローカル更新し、DBへは非同期で永続化する。
+     */
+    private fun recordLaunch(app: LauncherApp) {
+        val now = System.currentTimeMillis()
+        val key = "${app.packageName}/${app.className}"
+        _uiState.update { state ->
+            state.copy(
+                apps = state.apps.map {
+                    if ("${it.packageName}/${it.className}" == key) {
+                        it.copy(launchCount = it.launchCount + 1, lastLaunchedAt = now)
+                    } else {
+                        it
+                    }
+                },
+            )
+        }
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) { repository.recordLaunch(app.packageName, app.className) }
+            } catch (e: Exception) {
+                Log.w(TAG, "起動履歴の更新に失敗しました", e)
+            }
+        }
+        PerfLog.log("app launch stats updated")
+    }
+
+    /** 並び順を変更し永続化する。同じ値なら何もしない。 */
+    fun setSortMode(mode: AppSortMode) {
+        if (_uiState.value.sortMode == mode) return
+        _uiState.update { it.copy(sortMode = mode) }
+        prefs.appSortMode = mode.prefValue
+        PerfLog.log("sort mode changed -> ${mode.prefValue}")
     }
 
     /** 検索文字列を更新する。絞り込みは UiState.filteredApps が行う。 */
