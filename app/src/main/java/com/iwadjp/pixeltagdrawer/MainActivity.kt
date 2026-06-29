@@ -86,7 +86,9 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         PerfLog.start()
         PerfLog.log("MainActivity.onCreate start")
+        PerfLog.log("[LM] Activity.onCreate (${describeIntent(intent)})")
         launchFilter.value = parseLaunchFilter(intent)
+        PerfLog.log("[LM] Activity.onCreate parsed launchFilter=${formatLaunchFilter(launchFilter.value)}")
         PerfLog.log("setContent start (launchFilter=${formatLaunchFilter(launchFilter.value)})")
         setContent {
             PixelTagDrawerApp(
@@ -102,6 +104,20 @@ class MainActivity : ComponentActivity() {
         setIntent(intent)
         launchFilter.value = parseLaunchFilter(intent)
         newIntentSeq.value = newIntentSeq.value + 1
+        PerfLog.log(
+            "[LM] Activity.onNewIntent seq=${newIntentSeq.value} " +
+                "parsed=${formatLaunchFilter(launchFilter.value)} (${describeIntent(intent)})",
+        )
+    }
+
+    // 観測用: 通常アイコンタップ時に onNewIntent が来ているか / 純resume なのかを実機で見分ける。
+    // uiMode は Compose 側 state のため Activity からは参照せず、ここでは launchFilter / seq のみ記録する。
+    override fun onResume() {
+        super.onResume()
+        PerfLog.log(
+            "[LM] Activity.onResume launchFilter=${formatLaunchFilter(launchFilter.value)} " +
+                "seq=${newIntentSeq.value}",
+        )
     }
 
     /** 起動Intent extras を解釈する。タグなし指定を優先。指定が無ければ null。 */
@@ -135,6 +151,25 @@ private fun formatLaunchFilter(filter: LaunchFilter?): String = when (filter) {
     is LaunchFilter.Tag -> "Tag(tagId=${filter.tagId})"
     LaunchFilter.Untagged -> "Untagged"
     null -> "none"
+}
+
+/**
+ * 診断用に Intent の概要を読みやすい1行にする。観測専用。
+ * 個人情報を避けるため値は出さず、action / categories / extras の key 名 / flags のみを出す。
+ */
+private fun describeIntent(intent: Intent?): String {
+    intent ?: return "intent=null"
+    val action = intent.action?.removePrefix("android.intent.action.") ?: "none"
+    val categories = intent.categories
+        ?.joinToString(",") { it.removePrefix("android.intent.category.") }
+        ?.ifEmpty { "none" }
+        ?: "none"
+    val extras = intent.extras?.keySet()
+        ?.joinToString(",") { it.removePrefix("com.iwadjp.pixeltagdrawer.extra.") }
+        ?.ifEmpty { "none" }
+        ?: "none"
+    val flags = "0x" + intent.flags.toString(16)
+    return "action=$action categories=[$categories] extras=[$extras] flags=$flags"
 }
 
 private const val TAG_SHORTCUT = "PinShortcut"
@@ -280,6 +315,15 @@ fun AppListScreen(
         tagViewModel.clearSelectedApp()
     }
 
+    // 観測用: 初回 compose 時の入力値と初期モードを1回だけ記録する (再compose の連発は記録しない)。
+    LaunchedEffect(Unit) {
+        PerfLog.log(
+            "[LM] AppListScreen first compose " +
+                "launchFilter=${formatLaunchFilter(launchFilter)} seq=$newIntentSeq uiMode=$uiMode " +
+                "(reason=initial)",
+        )
+    }
+
     // 起動/新Intent の扱い (newIntentSeq でキーするので onNewIntent ごとに再評価される):
     //  - launchFilter != null: ショートカット起動 → filter 適用 + Simplified に初期化。
     //  - launchFilter == null かつ newIntentSeq > 0: 明示的な通常アイコンタップ → None に戻し、
@@ -287,16 +331,22 @@ fun AppListScreen(
     //  - launchFilter == null かつ newIntentSeq == 0: 初期通常起動 → 何もしない
     //    (uiMode は初期 None、復元済みフィルタは維持)。単なるタスク復帰は Intent が来ず再評価されない。
     LaunchedEffect(launchFilter, newIntentSeq) {
+        PerfLog.log(
+            "[LM] LaunchedEffect(launch) enter filter=${formatLaunchFilter(launchFilter)} seq=$newIntentSeq " +
+                "(filter is ${if (launchFilter == null) "null" else "non-null"})",
+        )
         when (launchFilter) {
             is LaunchFilter.Tag -> {
                 tagViewModel.applyLaunchFilterTag(launchFilter.tagId)
                 uiMode = ShortcutUiMode.Simplified
                 foldEditing()
+                PerfLog.log("[LM] branch=shortcut filter applied -> uiMode=Simplified (reason=shortcut intent)")
             }
             LaunchFilter.Untagged -> {
                 tagViewModel.applyLaunchUntaggedFilter()
                 uiMode = ShortcutUiMode.Simplified
                 foldEditing()
+                PerfLog.log("[LM] branch=shortcut untagged applied -> uiMode=Simplified (reason=shortcut intent)")
             }
             null -> {
                 if (newIntentSeq > 0) {
@@ -304,6 +354,9 @@ fun AppListScreen(
                     uiMode = ShortcutUiMode.None
                     tagViewModel.clearFilterTags()
                     foldEditing()
+                    PerfLog.log("[LM] branch=normal new intent reset -> uiMode=None, clearFilterTags (reason=normal intent reset)")
+                } else {
+                    PerfLog.log("[LM] branch=initial normal no-op (seq=0)")
                 }
             }
         }
@@ -350,7 +403,10 @@ fun AppListScreen(
             // 通常モード: どちらも出さない / 簡素: 編集のみ / 編集: 一覧に戻るのみ。
             when (uiMode) {
                 ShortcutUiMode.Simplified -> {
-                    TextButton(onClick = { uiMode = ShortcutUiMode.Editing }) {
+                    TextButton(onClick = {
+                        uiMode = ShortcutUiMode.Editing
+                        PerfLog.log("[LM] button=Edit -> uiMode=Editing (reason=edit clicked)")
+                    }) {
                         Text("編集")
                     }
                 }
@@ -363,6 +419,7 @@ fun AppListScreen(
                         selectedBulkApps = emptySet()
                         bulkTargetTagId = null
                         tagViewModel.clearSelectedApp()
+                        PerfLog.log("[LM] button=ListReturn -> uiMode=Simplified (reason=list return clicked)")
                     }) {
                         Text("一覧に戻る")
                     }
@@ -459,7 +516,10 @@ fun AppListScreen(
         if (tagState.tags.isNotEmpty() && !simplified) {
             TagFilterSection(
                 state = tagState,
-                onToggle = tagViewModel::toggleFilterTag,
+                onToggle = { tagId ->
+                    PerfLog.log("[LM] manual filter toggle tagId=$tagId")
+                    tagViewModel.toggleFilterTag(tagId)
+                },
                 onClear = tagViewModel::clearFilterTags,
                 onToggleUntagged = tagViewModel::toggleUntaggedFilter,
                 onToggleMultiSelect = tagViewModel::toggleMultiSelectFilter,
@@ -642,6 +702,7 @@ fun AppListScreen(
                                             selectedBulkApps = selectedBulkApps.toMutableSet()
                                                 .apply { if (!add(key)) remove(key) }
                                         } else {
+                                            PerfLog.log("[LM] app launch clicked")
                                             viewModel.launch(app)
                                         }
                                     },
@@ -675,6 +736,7 @@ fun AppListScreen(
                                             selectedBulkApps = selectedBulkApps.toMutableSet()
                                                 .apply { if (!add(key)) remove(key) }
                                         } else {
+                                            PerfLog.log("[LM] app launch clicked")
                                             viewModel.launch(app)
                                         }
                                     },

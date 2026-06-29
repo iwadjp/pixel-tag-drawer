@@ -74,6 +74,17 @@ object PerfLog {
         } else {
             snapshot.forEach { sb.append("+${it.elapsedMs}ms ${it.message}\n") }
         }
+        // 起動/UIモード遷移の観測用に、[LM] プレフィックス付きイベントだけを抜き出して並べる。
+        // (adb なしで onCreate/onNewIntent/onResume/LaunchedEffect/uiMode の流れを実機で確認するため)
+        sb.append("== launch/ui trace ==\n")
+        val launchEvents = snapshot.filter { it.message.startsWith("[LM]") }
+        if (launchEvents.isEmpty()) {
+            sb.append("(none)\n")
+        } else {
+            launchEvents.forEach {
+                sb.append("+${it.elapsedMs}ms ${it.message.removePrefix("[LM] ")}\n")
+            }
+        }
         sb.append("== summary ==\n")
         fun firstMs(sub: String): Long? =
             snapshot.firstOrNull { it.message.contains(sub) }?.elapsedMs
