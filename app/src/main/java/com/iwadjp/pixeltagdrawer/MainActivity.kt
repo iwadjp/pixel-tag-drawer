@@ -254,29 +254,33 @@ fun AppListScreen(
     var selectedBulkApps by remember { mutableStateOf(emptySet<String>()) }
     var bulkTargetTagId by remember { mutableStateOf<Long?>(null) }
 
-    // ショートカット/外部フィルタ起動かどうか。「一覧に戻る」導線の表示判定に使う (セッション内固定)。
-    var launchedViaShortcut by remember { mutableStateOf(launchFilter != null) }
-    // 簡素表示中か。ショートカット起動時は初期ON。「編集」/「一覧に戻る」で切り替える。
-    var simplifiedView by remember { mutableStateOf(launchFilter != null) }
+    // UIモード。通常起動=None、ショートカット起動=Simplified、その編集画面=Editing。
+    // 初期値: launchFilter があれば Simplified、無ければ None。以後はモード遷移操作で更新。
+    var uiMode by remember {
+        mutableStateOf(
+            if (launchFilter != null) ShortcutUiMode.Simplified else ShortcutUiMode.None,
+        )
+    }
+    // 簡素モード (編集系UIを隠す) かどうか。表示条件はすべてこのモードに基づき一意に決める。
+    val simplified = uiMode == ShortcutUiMode.Simplified
 
-    // 起動Intentで指定されたタグフィルタを適用し、ショートカット起動時は編集系を畳む。
-    // これは保存済みフィルタの復元より優先される。
+    // 起動Intentにフィルタがある時だけ適用し、簡素モードに初期化する。
+    // フィルタが無い (通常Intent/タスク復帰) 場合は現在のモード・フィルタを保持し、勝手に解除しない。
     LaunchedEffect(launchFilter) {
         when (launchFilter) {
             is LaunchFilter.Tag -> tagViewModel.applyLaunchFilterTag(launchFilter.tagId)
             LaunchFilter.Untagged -> tagViewModel.applyLaunchUntaggedFilter()
             null -> Unit
         }
-        launchedViaShortcut = launchFilter != null
-        simplifiedView = launchFilter != null
-        PerfLog.log("launch filter applied (filter=${formatLaunchFilter(launchFilter)}, simplified=$simplifiedView)")
         if (launchFilter != null) {
-            // ショートカット起動時は検索 + 絞り込み一覧中心にし、編集系の残留状態をクリア
+            // ショートカット起動/新Intent時のみ簡素モードに初期化し、編集系の残留状態を畳む。
+            uiMode = ShortcutUiMode.Simplified
             tagEditMode = false
             selectedBulkApps = emptySet()
             bulkTargetTagId = null
             tagViewModel.clearSelectedApp()
         }
+        PerfLog.log("launch filter applied (filter=${formatLaunchFilter(launchFilter)}, mode=$uiMode)")
     }
 
     // 一覧の最終要素がナビゲーションバーに隠れないよう、その分を一覧下端の余白に加える。
@@ -315,16 +319,18 @@ fun AppListScreen(
             }) {
                 Text("診断")
             }
-            // 簡素表示中は「編集」で従来UIへ。ショートカット起動時の通常UIには「一覧に戻る」を出す。
-            if (simplifiedView) {
-                TextButton(onClick = { simplifiedView = false }) {
-                    Text("編集")
+            // 「編集」「一覧に戻る」の表示条件は3モードに基づき一意に決める。
+            // 通常モード: どちらも出さない / 簡素: 編集のみ / 編集: 一覧に戻るのみ。
+            when (uiMode) {
+                ShortcutUiMode.Simplified -> {
+                    TextButton(onClick = { uiMode = ShortcutUiMode.Editing }) {
+                        Text("編集")
+                    }
                 }
-            } else {
-                if (launchedViaShortcut) {
+                ShortcutUiMode.Editing -> {
                     TextButton(onClick = {
-                        // 簡素表示へ戻す。絞り込み条件は維持し、編集系の状態だけ畳む。
-                        simplifiedView = true
+                        // 簡素モードへ戻す。絞り込み条件は維持し、編集系の状態だけ畳む。
+                        uiMode = ShortcutUiMode.Simplified
                         showTagManagement = false
                         tagEditMode = false
                         selectedBulkApps = emptySet()
@@ -333,9 +339,14 @@ fun AppListScreen(
                     }) {
                         Text("一覧に戻る")
                     }
+                    TextButton(onClick = { showTagManagement = !showTagManagement }) {
+                        Text(if (showTagManagement) "閉じる" else "タグ管理")
+                    }
                 }
-                TextButton(onClick = { showTagManagement = !showTagManagement }) {
-                    Text(if (showTagManagement) "閉じる" else "タグ管理")
+                ShortcutUiMode.None -> {
+                    TextButton(onClick = { showTagManagement = !showTagManagement }) {
+                        Text(if (showTagManagement) "閉じる" else "タグ管理")
+                    }
                 }
             }
         }
@@ -351,7 +362,7 @@ fun AppListScreen(
         }
 
         // タグ管理UIは開いているときだけ表示。ショートカット簡素表示中は隠す。
-        if (showTagManagement && !simplifiedView) {
+        if (showTagManagement && !simplified) {
             TagSection(
                 state = tagState,
                 shortcutMessage = shortcutMessage,
@@ -418,7 +429,7 @@ fun AppListScreen(
         }
 
         // 絞り込みチップはタグがあり、かつショートカット簡素表示でないときだけ表示する
-        if (tagState.tags.isNotEmpty() && !simplifiedView) {
+        if (tagState.tags.isNotEmpty() && !simplified) {
             TagFilterSection(
                 state = tagState,
                 onToggle = tagViewModel::toggleFilterTag,
@@ -511,7 +522,7 @@ fun AppListScreen(
                             style = MaterialTheme.typography.labelMedium,
                         )
                         // タグ編集モード切替。簡素表示中は出さない。OFF で一括選択も閉じる
-                        if (!simplifiedView) {
+                        if (!simplified) {
                             FilterChip(
                                 selected = tagEditMode,
                                 onClick = {
@@ -541,7 +552,7 @@ fun AppListScreen(
                 }
 
                 // タグ編集ON かつ簡素表示でないときだけ、一括付与/解除バーを表示する
-                if (tagEditMode && !simplifiedView) {
+                if (tagEditMode && !simplified) {
                     BulkTagBar(
                         tags = tagState.tags,
                         selectedCount = selectedBulkApps.size,
@@ -903,6 +914,14 @@ private fun DiagnosticsDialog(
         },
     )
 }
+
+/**
+ * UIモード。通常起動/ショートカット起動の表示文脈を一意に表す。
+ * None: 通常モード (編集/一覧に戻るは出さない)。
+ * Simplified: ショートカット簡素モード (編集のみ表示、編集系UIは隠す)。
+ * Editing: ショートカット編集モード (一覧に戻るのみ表示、編集系UIを出す)。
+ */
+private enum class ShortcutUiMode { None, Simplified, Editing }
 
 /** アプリ一覧の表示モード。 */
 private enum class AppDisplayMode { List, Grid }
