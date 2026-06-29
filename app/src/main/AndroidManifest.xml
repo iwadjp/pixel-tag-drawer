@@ -29,6 +29,19 @@
 
         </activity>
 
+        <!--
+            Pinned Shortcut 専用の中継 Activity (画面なし)。
+            通常ランチャー task と分離するため taskAffinity="" / excludeFromRecents="true" を指定する。
+            LAUNCHER カテゴリは付けない (ホームの通常アイコンにはしない)。
+            ランチャー (別アプリ) からショートカット経由で起動されるため exported="true"。
+        -->
+        <activity
+            android:name=".ShortcutEntryActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.NoDisplay" />
+
     </application>
 
 </manifest>

@@ -202,7 +202,8 @@ private const val TAG_SHORTCUT = "PinShortcut"
  * 非対応ランチャーや失敗時はクラッシュせず false を返す。
  */
 private fun requestPinTagShortcut(context: Context, tagId: Long, tagName: String): Boolean {
-    val intent = Intent(context, MainActivity::class.java).apply {
+    // 通常ランチャー task と分離するため、ショートカットは MainActivity ではなく中継 Activity を起動する。
+    val intent = Intent(context, ShortcutEntryActivity::class.java).apply {
         action = Intent.ACTION_VIEW
         putExtra(MainActivity.EXTRA_FILTER_TAG_ID, tagId)
         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
@@ -214,7 +215,8 @@ private fun requestPinTagShortcut(context: Context, tagId: Long, tagName: String
 
 /** 「タグなし」(未付与アプリのみ) で開く Pinned Shortcut の作成をリクエストする。 */
 private fun requestPinUntaggedShortcut(context: Context): Boolean {
-    val intent = Intent(context, MainActivity::class.java).apply {
+    // 通常ランチャー task と分離するため、ショートカットは MainActivity ではなく中継 Activity を起動する。
+    val intent = Intent(context, ShortcutEntryActivity::class.java).apply {
         action = Intent.ACTION_VIEW
         putExtra(MainActivity.EXTRA_SHOW_UNTAGGED_ONLY, true)
         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
