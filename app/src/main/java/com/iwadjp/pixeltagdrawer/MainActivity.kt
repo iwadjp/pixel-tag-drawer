@@ -1226,7 +1226,7 @@ private fun BulkTagBar(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .offset(y = (-2).dp)
+            .offset(y = (-8).dp)
             .padding(top = 0.dp, bottom = 2.dp),
         verticalArrangement = Arrangement.spacedBy(0.dp),
     ) {
