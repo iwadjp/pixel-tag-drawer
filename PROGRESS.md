@@ -1236,3 +1236,79 @@ Pixel Launcher 補助ランチャーとしての運用導線が大きく改善�
 - dogfooding で体感確認を継続 (収束した起動/フィルタ挙動の定着確認)。
 - Launch/UI 診断の DEBUG ガード化 / 整理。
 - (別軸) 通常起動の label 取得コスト調査・表示順改善・DB 系は、指示があれば別タスクで着手。
+
+---
+
+## 2026-06-30 Phase 1-A アプリ並び替え改善の受け入れ
+
+- **対象コミット**:
+  - `355cc74 Add app sort modes by launch history`
+  - `56236ae Apply app sort mode to displayed list`
+  - `16ec7f2 Fix launch history sorting state`
+  - `0ccbdd8 Use UsageStats for app sort history`
+  - `a4a3d2c Compact app sort controls`
+  - `08dac37 Polish compact app list controls`
+- **対象端末**: Google Pixel 10a
+- **確認結果**: test ok
+- **透明性**: 確認結果は利用者の Pixel 10a 実機確認報告に基づく。agent 環境では adb / 実機確認を行っていない。
+
+### 経緯
+
+- 当初は pixel-tag-drawer 内から起動した履歴 (`launchCount` / `lastLaunchedAt`) を使って「最近起動」「起動回数」を並び替える方針だった。
+- しかし利用者期待は「どこから起動しても反映される最近起動順 / 起動回数順」だった。
+- アプリ内起動履歴だけでは、他のランチャーやホーム画面から起動した利用実態が反映されず、実機上では「並び替えボタンを押しても効かない」ように見えた。
+- このため、Phase 1-A の recent/count sort は Android 端末全体の使用履歴に基づく UsageStats 方式へ方針転換した。
+
+### UsageStats 方式
+
+- `PACKAGE_USAGE_STATS` を追加。
+- `UsageStatsManager` で過去30日分の使用履歴を取得。
+- 集計単位は `packageName`。
+- `recent` は最新使用時刻で並び替える。
+- `count` は foreground / resumed 相当イベント数で並び替える。
+- 使用状況アクセスが未許可の場合は recent/count を利用不可にし、名前順へ fallback する。
+- 使用状況アクセス設定への導線を UI に追加した。
+
+### 制約
+
+- 使用状況アクセス許可が必要。通常のランタイム権限ダイアログではなく、Android 設定で利用者が手動許可する必要がある。
+- UsageStats は基本的に `packageName` 単位のため、同一 package 内の複数 launcher activity は同じ統計を共有する。
+- `count` は OS イベント由来の foreground / resumed 相当回数であり、厳密な「アプリ起動回数」ではない。
+
+### UI 改善
+
+- sortMode 切替時に List / Grid を `scrollToItem(0)` で先頭へ戻すようにした。
+- ソート UI を常時表示の FilterChip から `DropdownMenu` 方式へ変更した。
+- 通常画面上部 UI を圧縮した。
+- 件数 / 表示切替 / 並び替え / `⋯` を1行に整理した。
+- 右端 `⋯` が潰れないよう `IconButton` + `40.dp` 固定サイズへ調整した。
+- タグチップと検索欄は通常画面で常時使える状態を維持した。
+
+### Pixel 10a 実機確認
+
+- ソートが効くことを確認。
+- UsageStats 方式により、pixel-tag-drawer 以外から起動したアプリも recent/count に反映されることを確認。
+- sortMode 切替後に List / Grid が先頭へ戻ることを確認。
+- 通常画面上部 UI の圧迫感が改善したことを確認。
+- `⋯` メニュー表示が潰れず、操作できることを確認。
+
+### 変更しなかったもの
+
+- `QUERY_ALL_PACKAGES` 追加なし。
+- HOME ランチャー宣言なし。
+- DB schema / DB version 変更なし。
+- タグ並び替え、D&D、任意順、更新順は未対応。
+
+### 判断
+
+Phase 1-A のアプリ並び替え改善は受け入れ。
+当初の in-app launch history 方式は利用者期待とズレていたため、UsageStats 方式へ切り替えた判断は妥当。
+recent/count sort、未許可時の fallback、設定導線、ソート後の先頭スクロール、通常画面上部 UI の圧縮まで含めて、Pixel 10a dogfooding の test ok を確認した。
+
+### 次候補
+
+- タグ並び替え
+- D&D / 任意順
+- 更新順
+- UsageStats UI 文言の追加 polish
+- dogfooding 継続
