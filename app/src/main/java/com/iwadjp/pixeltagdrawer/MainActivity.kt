@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -34,6 +35,7 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -439,6 +441,7 @@ fun AppListScreen(
     val gridState = rememberLazyGridState()
     var previousScrollSortMode by remember { mutableStateOf<AppSortMode?>(null) }
     var sortMenuExpanded by remember { mutableStateOf(false) }
+    var appListMenuExpanded by remember { mutableStateOf(false) }
 
     // 操作エリア (タイトル/タグ/検索/件数) は固定し、アプリ一覧だけをスクロールさせる。
     // そのため全体は Column、一覧部分のみ weight(1f) を持つ LazyColumn にする。
@@ -501,9 +504,7 @@ fun AppListScreen(
                     }
                 }
                 ShortcutUiMode.None -> {
-                    TextButton(onClick = { showTagManagement = !showTagManagement }) {
-                        Text(if (showTagManagement) "閉じる" else "タグ管理")
-                    }
+                    // 通常画面では低頻度操作を一覧上部の ⋯ メニューへ寄せる。
                 }
             }
         }
@@ -595,7 +596,6 @@ fun AppListScreen(
                 },
                 onClear = tagViewModel::clearFilterTags,
                 onToggleUntagged = tagViewModel::toggleUntaggedFilter,
-                onToggleMultiSelect = tagViewModel::toggleMultiSelectFilter,
             )
         }
 
@@ -700,39 +700,24 @@ fun AppListScreen(
             }
 
             else -> {
-                // 件数と表示モード切替は固定エリアに残し、一覧だけをスクロールさせる
+                // 件数・表示切替・並び替え・低頻度操作を1行にまとめ、一覧だけをスクロールさせる
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(top = 4.dp, bottom = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                    horizontalArrangement = Arrangement.Start,
                 ) {
+                    Text(
+                        text = "${sortedApps.size} 件",
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
                     Row(
+                        modifier = Modifier.weight(1f),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
-                        Text(
-                            text = "${sortedApps.size} 件",
-                            style = MaterialTheme.typography.labelMedium,
-                        )
-                        // タグ編集モード切替。簡素表示中は出さない。OFF で一括選択も閉じる
-                        if (!simplified) {
-                            FilterChip(
-                                selected = tagEditMode,
-                                onClick = {
-                                    tagEditMode = !tagEditMode
-                                    if (!tagEditMode) {
-                                        tagViewModel.clearSelectedApp()
-                                        selectedBulkApps = emptySet()
-                                        bulkTargetTagId = null
-                                    }
-                                },
-                                label = { Text("タグ編集") },
-                            )
-                        }
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         FilterChip(
                             selected = displayMode == AppDisplayMode.List,
                             onClick = { displayMode = AppDisplayMode.List },
@@ -743,79 +728,118 @@ fun AppListScreen(
                             onClick = { displayMode = AppDisplayMode.Grid },
                             label = { Text("アイコン") },
                         )
-                    }
-                }
-
-                // 並び替えセレクタ。簡素表示中は操作を増やさないため隠す (現在の sortMode は適用済み)。
-                if (!simplified) {
-                    val sortLabel = when (effectiveSortMode) {
-                        AppSortMode.Name -> "名前順"
-                        AppSortMode.Recent -> "最近起動"
-                        AppSortMode.Count -> "起動回数"
-                    }
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 4.dp),
-                    ) {
-                        TextButton(onClick = { sortMenuExpanded = true }) {
-                            Text("並び替え: $sortLabel ▼")
-                        }
-                        DropdownMenu(
-                            expanded = sortMenuExpanded,
-                            onDismissRequest = { sortMenuExpanded = false },
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text("名前順") },
-                                onClick = {
-                                    sortMenuExpanded = false
-                                    viewModel.setSortMode(AppSortMode.Name)
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("最近起動") },
-                                enabled = uiState.usageStatsAccessGranted,
-                                onClick = {
-                                    sortMenuExpanded = false
-                                    viewModel.setSortMode(AppSortMode.Recent)
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("起動回数") },
-                                enabled = uiState.usageStatsAccessGranted,
-                                onClick = {
-                                    sortMenuExpanded = false
-                                    viewModel.setSortMode(AppSortMode.Count)
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        text = "最近起動・起動回数は端末の使用履歴に基づきます。同じパッケージの複数アプリは同じ統計を共有します",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        if (!simplified) {
+                            val sortLabel = when (effectiveSortMode) {
+                                AppSortMode.Name -> "名前順"
+                                AppSortMode.Recent -> "最近"
+                                AppSortMode.Count -> "回数"
+                            }
+                            Box {
+                                TextButton(onClick = { sortMenuExpanded = true }) {
+                                    Text("$sortLabel ▼")
+                                }
+                                DropdownMenu(
+                                    expanded = sortMenuExpanded,
+                                    onDismissRequest = { sortMenuExpanded = false },
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text("名前順") },
+                                        onClick = {
+                                            sortMenuExpanded = false
+                                            viewModel.setSortMode(AppSortMode.Name)
+                                        },
                                     )
-                                },
-                                enabled = false,
-                                onClick = {},
-                            )
-                        }
-                    }
-                    if (!uiState.usageStatsAccessGranted) {
-                        Text(
-                            text = "最近起動・起動回数には使用状況へのアクセス許可が必要です",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(bottom = 4.dp),
-                        )
-                        TextButton(
-                            onClick = {
-                                PerfLog.log("[USAGE] usage access settings opened")
-                                context.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
-                            },
-                            modifier = Modifier.padding(bottom = 4.dp),
-                        ) {
-                            Text("使用状況へのアクセス設定を開く")
+                                    DropdownMenuItem(
+                                        text = { Text("最近起動") },
+                                        enabled = uiState.usageStatsAccessGranted,
+                                        onClick = {
+                                            sortMenuExpanded = false
+                                            viewModel.setSortMode(AppSortMode.Recent)
+                                        },
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("起動回数") },
+                                        enabled = uiState.usageStatsAccessGranted,
+                                        onClick = {
+                                            sortMenuExpanded = false
+                                            viewModel.setSortMode(AppSortMode.Count)
+                                        },
+                                    )
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(
+                                                text = "最近起動・起動回数は端末の使用履歴に基づきます。同じパッケージの複数アプリは同じ統計を共有します",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                        },
+                                        enabled = false,
+                                        onClick = {},
+                                    )
+                                }
+                            }
+                            Box {
+                                IconButton(
+                                    onClick = { appListMenuExpanded = true },
+                                    modifier = Modifier.size(40.dp),
+                                ) {
+                                    Text("⋯")
+                                }
+                                DropdownMenu(
+                                    expanded = appListMenuExpanded,
+                                    onDismissRequest = { appListMenuExpanded = false },
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text(if (tagEditMode) "タグ編集を終了" else "タグ編集") },
+                                        onClick = {
+                                            appListMenuExpanded = false
+                                            tagEditMode = !tagEditMode
+                                            if (!tagEditMode) {
+                                                tagViewModel.clearSelectedApp()
+                                                selectedBulkApps = emptySet()
+                                                bulkTargetTagId = null
+                                            }
+                                        },
+                                    )
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(if (tagState.multiSelectFilter) "複数選択をオフ" else "複数選択")
+                                        },
+                                        onClick = {
+                                            appListMenuExpanded = false
+                                            tagViewModel.toggleMultiSelectFilter()
+                                        },
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text(if (showTagManagement) "タグ管理を閉じる" else "タグ管理") },
+                                        onClick = {
+                                            appListMenuExpanded = false
+                                            showTagManagement = !showTagManagement
+                                        },
+                                    )
+                                    if (!uiState.usageStatsAccessGranted) {
+                                        DropdownMenuItem(
+                                            text = { Text("使用状況アクセス設定") },
+                                            onClick = {
+                                                appListMenuExpanded = false
+                                                PerfLog.log("[USAGE] usage access settings opened")
+                                                context.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
+                                            },
+                                        )
+                                    }
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(
+                                                text = "最近起動・起動回数は端末の使用履歴に基づきます。同じパッケージの複数アプリは同じ統計を共有します",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                        },
+                                        enabled = false,
+                                        onClick = {},
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -1077,44 +1101,25 @@ private fun TagFilterSection(
     onToggle: (Long) -> Unit,
     onClear: () -> Unit,
     onToggleUntagged: () -> Unit,
-    onToggleMultiSelect: () -> Unit,
 ) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 8.dp),
+            .padding(top = 4.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text(
-                text = "タグで絞り込み",
-                style = MaterialTheme.typography.titleSmall,
-                modifier = Modifier.weight(1f),
-            )
-            // 複数選択ON で複数タグAND。OFF(既定)はクリックで単一切替。
-            FilterChip(
-                selected = state.multiSelectFilter,
-                onClick = onToggleMultiSelect,
-                label = { Text("複数選択") },
-            )
-            // いずれかの絞り込みが効いている時だけ、まとめて解除できるようにする
-            if (state.selectedFilterTagIds.isNotEmpty() || state.showUntaggedOnly) {
-                TextButton(onClick = onClear) {
-                    Text("解除")
-                }
-            }
-        }
         // タグが多くても固定エリアの高さを抑えるため、横スクロールのチップ列にする
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .horizontalScroll(rememberScrollState()),
+            verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            Text(
+                text = "タグ:",
+                style = MaterialTheme.typography.labelMedium,
+            )
             // 先頭に「タグなし」(未付与アプリのみ)。通常タグとは排他
             FilterChip(
                 selected = state.showUntaggedOnly,
@@ -1127,6 +1132,12 @@ private fun TagFilterSection(
                     onClick = { onToggle(tag.tagId) },
                     label = { Text(tag.name) },
                 )
+            }
+            // いずれかの絞り込みが効いている時だけ、まとめて解除できるようにする
+            if (state.selectedFilterTagIds.isNotEmpty() || state.showUntaggedOnly) {
+                TextButton(onClick = onClear) {
+                    Text("解除")
+                }
             }
         }
     }
