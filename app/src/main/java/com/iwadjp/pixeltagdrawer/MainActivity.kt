@@ -730,56 +730,56 @@ fun AppListScreen(
                             onClick = { displayMode = AppDisplayMode.Grid },
                             label = { Text("アイコン") },
                         )
+                        val sortLabel = when (effectiveSortMode) {
+                            AppSortMode.Name -> "名前順"
+                            AppSortMode.Recent -> "最近"
+                            AppSortMode.Count -> "回数"
+                        }
+                        Box {
+                            TextButton(onClick = { sortMenuExpanded = true }) {
+                                Text("$sortLabel ▼")
+                            }
+                            DropdownMenu(
+                                expanded = sortMenuExpanded,
+                                onDismissRequest = { sortMenuExpanded = false },
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("名前順") },
+                                    onClick = {
+                                        sortMenuExpanded = false
+                                        viewModel.setSortMode(AppSortMode.Name)
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("最近起動") },
+                                    enabled = uiState.usageStatsAccessGranted,
+                                    onClick = {
+                                        sortMenuExpanded = false
+                                        viewModel.setSortMode(AppSortMode.Recent)
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("起動回数") },
+                                    enabled = uiState.usageStatsAccessGranted,
+                                    onClick = {
+                                        sortMenuExpanded = false
+                                        viewModel.setSortMode(AppSortMode.Count)
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            text = "最近起動・起動回数は端末の使用履歴に基づきます。同じパッケージの複数アプリは同じ統計を共有します",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    },
+                                    enabled = false,
+                                    onClick = {},
+                                )
+                            }
+                        }
                         if (!simplified) {
-                            val sortLabel = when (effectiveSortMode) {
-                                AppSortMode.Name -> "名前順"
-                                AppSortMode.Recent -> "最近"
-                                AppSortMode.Count -> "回数"
-                            }
-                            Box {
-                                TextButton(onClick = { sortMenuExpanded = true }) {
-                                    Text("$sortLabel ▼")
-                                }
-                                DropdownMenu(
-                                    expanded = sortMenuExpanded,
-                                    onDismissRequest = { sortMenuExpanded = false },
-                                ) {
-                                    DropdownMenuItem(
-                                        text = { Text("名前順") },
-                                        onClick = {
-                                            sortMenuExpanded = false
-                                            viewModel.setSortMode(AppSortMode.Name)
-                                        },
-                                    )
-                                    DropdownMenuItem(
-                                        text = { Text("最近起動") },
-                                        enabled = uiState.usageStatsAccessGranted,
-                                        onClick = {
-                                            sortMenuExpanded = false
-                                            viewModel.setSortMode(AppSortMode.Recent)
-                                        },
-                                    )
-                                    DropdownMenuItem(
-                                        text = { Text("起動回数") },
-                                        enabled = uiState.usageStatsAccessGranted,
-                                        onClick = {
-                                            sortMenuExpanded = false
-                                            viewModel.setSortMode(AppSortMode.Count)
-                                        },
-                                    )
-                                    DropdownMenuItem(
-                                        text = {
-                                            Text(
-                                                text = "最近起動・起動回数は端末の使用履歴に基づきます。同じパッケージの複数アプリは同じ統計を共有します",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            )
-                                        },
-                                        enabled = false,
-                                        onClick = {},
-                                    )
-                                }
-                            }
                             Box {
                                 IconButton(
                                     onClick = { appListMenuExpanded = true },
