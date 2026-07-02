@@ -23,9 +23,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -38,13 +40,16 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
@@ -67,7 +72,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
@@ -87,6 +94,7 @@ import com.iwadjp.pixeltagdrawer.ui.AppListViewModel
 import com.iwadjp.pixeltagdrawer.ui.AppSortMode
 import com.iwadjp.pixeltagdrawer.ui.TagViewModel
 import com.iwadjp.pixeltagdrawer.ui.sortApps
+import kotlinx.coroutines.delay
 
 class MainActivity : ComponentActivity() {
 
@@ -885,11 +893,12 @@ fun AppListScreen(
                     )
                 }
 
+                Box(modifier = Modifier.weight(1f)) {
                 when (displayMode) {
                     AppDisplayMode.List -> {
                         LazyColumn(
                             state = listState,
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.fillMaxSize(),
                             contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = navBarPadding + 24.dp),
                             verticalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
@@ -925,13 +934,14 @@ fun AppListScreen(
                                 HorizontalDivider()
                             }
                         }
+                        ListScrollIndicator(listState)
                     }
 
                     AppDisplayMode.Grid -> {
                         LazyVerticalGrid(
                             columns = GridCells.Fixed(4),
                             state = gridState,
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.fillMaxSize(),
                             contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = navBarPadding + 24.dp),
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -959,7 +969,9 @@ fun AppListScreen(
                                 )
                             }
                         }
+                        GridScrollIndicator(gridState)
                     }
+                }
                 }
             }
         }
@@ -1099,6 +1111,78 @@ private fun TagSection(
             }
         }
         HorizontalDivider(modifier = Modifier.padding(top = 8.dp))
+    }
+}
+
+// 起動直後・スクロール中・停止直後の一定時間だけ表示するフェード付きアルファ値。
+// 常時表示にはしない (FB2要件)。
+@Composable
+private fun rememberScrollIndicatorAlpha(isScrollInProgress: Boolean): Float {
+    val visible = remember { mutableStateOf(true) }
+    LaunchedEffect(Unit) {
+        delay(1800)
+        visible.value = false
+    }
+    LaunchedEffect(isScrollInProgress) {
+        if (isScrollInProgress) {
+            visible.value = true
+        } else {
+            delay(1800)
+            visible.value = false
+        }
+    }
+    val alpha by animateFloatAsState(
+        targetValue = if (visible.value) 0.6f else 0f,
+        label = "scrollIndicatorAlpha",
+    )
+    return alpha
+}
+
+@Composable
+private fun BoxScope.ListScrollIndicator(state: LazyListState) {
+    val layoutInfo = state.layoutInfo
+    val totalCount = layoutInfo.totalItemsCount
+    val visibleCount = layoutInfo.visibleItemsInfo.size
+    if (totalCount == 0 || visibleCount >= totalCount) return
+    val alpha = rememberScrollIndicatorAlpha(state.isScrollInProgress)
+    if (alpha <= 0f) return
+    val firstIndex = layoutInfo.visibleItemsInfo.firstOrNull()?.index ?: 0
+    val fraction = firstIndex.toFloat() / (totalCount - visibleCount).coerceAtLeast(1)
+    val thumbFraction = (visibleCount.toFloat() / totalCount).coerceIn(0.08f, 1f)
+    ScrollIndicatorThumb(fraction = fraction, thumbFraction = thumbFraction, alpha = alpha)
+}
+
+@Composable
+private fun BoxScope.GridScrollIndicator(state: LazyGridState) {
+    val layoutInfo = state.layoutInfo
+    val totalCount = layoutInfo.totalItemsCount
+    val visibleCount = layoutInfo.visibleItemsInfo.size
+    if (totalCount == 0 || visibleCount >= totalCount) return
+    val alpha = rememberScrollIndicatorAlpha(state.isScrollInProgress)
+    if (alpha <= 0f) return
+    val firstIndex = layoutInfo.visibleItemsInfo.firstOrNull()?.index ?: 0
+    val fraction = firstIndex.toFloat() / (totalCount - visibleCount).coerceAtLeast(1)
+    val thumbFraction = (visibleCount.toFloat() / totalCount).coerceIn(0.08f, 1f)
+    ScrollIndicatorThumb(fraction = fraction, thumbFraction = thumbFraction, alpha = alpha)
+}
+
+@Composable
+private fun BoxScope.ScrollIndicatorThumb(fraction: Float, thumbFraction: Float, alpha: Float) {
+    Box(
+        modifier = Modifier
+            .align(Alignment.CenterEnd)
+            .fillMaxHeight()
+            .width(4.dp)
+            .padding(vertical = 4.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxHeight(thumbFraction.coerceIn(0f, 1f))
+                .fillMaxWidth()
+                .align(BiasAlignment(0f, (fraction.coerceIn(0f, 1f) * 2f) - 1f))
+                .alpha(alpha)
+                .background(MaterialTheme.colorScheme.onSurfaceVariant, RoundedCornerShape(2.dp)),
+        )
     }
 }
 
