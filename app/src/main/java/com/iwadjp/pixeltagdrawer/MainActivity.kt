@@ -595,7 +595,6 @@ fun AppListScreen(
                     PerfLog.log("[LM] manual filter toggle tagId=$tagId")
                     tagViewModel.toggleFilterTag(tagId)
                 },
-                onClear = tagViewModel::clearFilterTags,
                 onToggleUntagged = tagViewModel::toggleUntaggedFilter,
             )
         }
@@ -777,6 +776,12 @@ fun AppListScreen(
                                     enabled = false,
                                     onClick = {},
                                 )
+                            }
+                        }
+                        // タグ絞り込み中だけ、横スクロールに依存せず解除できるボタンを上部操作行に出す
+                        if (tagState.selectedFilterTagIds.isNotEmpty() || tagState.showUntaggedOnly) {
+                            TextButton(onClick = tagViewModel::clearFilterTags) {
+                                Text("解除")
                             }
                         }
                         if (!simplified) {
@@ -1101,7 +1106,6 @@ private fun TagSection(
 private fun TagFilterSection(
     state: com.iwadjp.pixeltagdrawer.ui.TagUiState,
     onToggle: (Long) -> Unit,
-    onClear: () -> Unit,
     onToggleUntagged: () -> Unit,
 ) {
     Column(
@@ -1134,12 +1138,6 @@ private fun TagFilterSection(
                     onClick = { onToggle(tag.tagId) },
                     label = { Text(tag.name) },
                 )
-            }
-            // いずれかの絞り込みが効いている時だけ、まとめて解除できるようにする
-            if (state.selectedFilterTagIds.isNotEmpty() || state.showUntaggedOnly) {
-                TextButton(onClick = onClear) {
-                    Text("解除")
-                }
             }
         }
     }
