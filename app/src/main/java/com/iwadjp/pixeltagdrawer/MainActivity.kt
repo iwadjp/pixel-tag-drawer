@@ -607,6 +607,7 @@ fun AppListScreen(
                     PerfLog.log("[LM] manual filter toggle tagId=$tagId")
                     tagViewModel.toggleFilterTag(tagId)
                 },
+                onClear = tagViewModel::clearFilterTags,
                 onToggleUntagged = tagViewModel::toggleUntaggedFilter,
             )
         }
@@ -787,23 +788,6 @@ fun AppListScreen(
                                     },
                                     enabled = false,
                                     onClick = {},
-                                )
-                            }
-                        }
-                        // タグ絞り込み中だけ、横スクロールに依存せず解除できるアイコンを上部操作行に出す
-                        // × と ⋯ は右端の限られた幅を分け合うため、40.dpではなく36.dpのコンパクトなスロットにする
-                        if (tagState.selectedFilterTagIds.isNotEmpty() || tagState.showUntaggedOnly) {
-                            IconButton(
-                                onClick = tagViewModel::clearFilterTags,
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .semantics { contentDescription = "タグ絞り込み解除" },
-                            ) {
-                                Text(
-                                    text = "×",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    textAlign = TextAlign.Center,
-                                    modifier = Modifier.offset(x = (-2).dp),
                                 )
                             }
                         }
@@ -1222,6 +1206,7 @@ private fun TopActionOverflowDots() {
 private fun TagFilterSection(
     state: com.iwadjp.pixeltagdrawer.ui.TagUiState,
     onToggle: (Long) -> Unit,
+    onClear: () -> Unit,
     onToggleUntagged: () -> Unit,
 ) {
     Column(
@@ -1254,6 +1239,12 @@ private fun TagFilterSection(
                     onClick = { onToggle(tag.tagId) },
                     label = { Text(tag.name) },
                 )
+            }
+            // いずれかの絞り込みが効いている時だけ、まとめて解除できるようにする
+            if (state.selectedFilterTagIds.isNotEmpty() || state.showUntaggedOnly) {
+                TextButton(onClick = onClear) {
+                    Text("解除")
+                }
             }
         }
     }
