@@ -15,6 +15,7 @@ import android.provider.Settings
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -76,7 +77,10 @@ import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
@@ -786,19 +790,32 @@ fun AppListScreen(
                                 )
                             }
                         }
-                        // タグ絞り込み中だけ、横スクロールに依存せず解除できるボタンを上部操作行に出す
+                        // タグ絞り込み中だけ、横スクロールに依存せず解除できるアイコンを上部操作行に出す
+                        // × と ⋯ は右端の限られた幅を分け合うため、40.dpではなく36.dpのコンパクトなスロットにする
                         if (tagState.selectedFilterTagIds.isNotEmpty() || tagState.showUntaggedOnly) {
-                            TextButton(onClick = tagViewModel::clearFilterTags) {
-                                Text("解除")
+                            IconButton(
+                                onClick = tagViewModel::clearFilterTags,
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .semantics { contentDescription = "タグ絞り込み解除" },
+                            ) {
+                                Text(
+                                    text = "×",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.offset(x = (-2).dp),
+                                )
                             }
                         }
                         if (!simplified) {
                             Box {
                                 IconButton(
                                     onClick = { appListMenuExpanded = true },
-                                    modifier = Modifier.size(40.dp),
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .semantics { contentDescription = "その他" },
                                 ) {
-                                    Text("⋯")
+                                    TopActionOverflowDots()
                                 }
                                 DropdownMenu(
                                     expanded = appListMenuExpanded,
@@ -1183,6 +1200,21 @@ private fun BoxScope.ScrollIndicatorThumb(fraction: Float, thumbFraction: Float,
                 .alpha(alpha)
                 .background(MaterialTheme.colorScheme.onSurfaceVariant, RoundedCornerShape(2.dp)),
         )
+    }
+}
+
+// 三点メニューの「⋯」。フォント字形依存で欠けて見える端末があるため、Textではなく自前で3点を描画する。
+@Composable
+private fun TopActionOverflowDots() {
+    val dotColor = MaterialTheme.colorScheme.onSurface
+    Canvas(modifier = Modifier.size(24.dp)) {
+        val radius = 2.1.dp.toPx()
+        val gap = 5.dp.toPx()
+        val centerY = size.height / 2f
+        val centerX = size.width / 2f
+        listOf(-gap, 0f, gap).forEach { dx ->
+            drawCircle(color = dotColor, radius = radius, center = Offset(centerX + dx, centerY))
+        }
     }
 }
 
