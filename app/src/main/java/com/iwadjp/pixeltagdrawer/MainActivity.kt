@@ -505,14 +505,29 @@ fun AppListScreen(
                 }
                 ShortcutUiMode.Editing -> {
                     TextButton(onClick = {
-                        // 簡素モードへ戻す。絞り込み条件は維持し、編集系の状態だけ畳む。
+                        // 簡素モードへ戻す。編集中に ◀▶ やタグタップで別タグへ移動していても、
+                        // 絞り込みは起動時の初期条件 (launchFilter) へ復元する。launchFilter は
+                        // 起動 Intent 由来の不変値なので、編集中の操作では上書きされない。
+                        // 起動タグが編集中に削除されていても applyShortcutFilterTag は安全 (絞り込みなしに戻る)。
                         uiMode = ShortcutUiMode.Simplified
+                        when (launchFilter) {
+                            is LaunchFilter.Tag ->
+                                tagViewModel.applyShortcutFilterTag(launchFilter.tagId)
+                            LaunchFilter.Untagged ->
+                                tagViewModel.applyShortcutUntaggedFilter()
+                            null -> {
+                                // 絞り込み起動でない場合 (通常は到達しない): 従来どおり現在の条件を維持する
+                            }
+                        }
                         showTagManagement = false
                         tagEditMode = false
                         selectedBulkApps = emptySet()
                         bulkTargetTagId = null
                         tagViewModel.clearSelectedApp()
-                        PerfLog.log("[LM] button=ListReturn -> uiMode=Simplified (reason=list return clicked)")
+                        PerfLog.log(
+                            "[LM] button=ListReturn -> uiMode=Simplified, " +
+                                "restore launch filter=${formatLaunchFilter(launchFilter)} (reason=list return clicked)",
+                        )
                     }) {
                         Text("一覧に戻る")
                     }
