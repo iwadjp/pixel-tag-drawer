@@ -69,6 +69,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -78,7 +79,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalContext
@@ -1249,6 +1253,35 @@ private fun TagFilterSection(
     onClear: () -> Unit,
     onToggleUntagged: () -> Unit,
 ) {
+    val scrollState = rememberScrollState()
+    val density = LocalDensity.current
+    // tagId -> チップのコンテンツ座標での (左端x, 幅)。スクロール量に依存しない位置。
+    val chipBounds = remember { mutableStateMapOf<Long, Pair<Float, Float>>() }
+    // 単一タグ選択中だけ自動スクロール対象にする (複数選択・タグなし絞り込みは対象外)
+    val autoScrollTargetId = if (!state.showUntaggedOnly) {
+        state.selectedFilterTagIds.singleOrNull()
+    } else {
+        null
+    }
+    val targetBounds = autoScrollTargetId?.let { chipBounds[it] }
+    // 選択タグが変わった時・チップ位置が確定した時に、可視範囲外なら見える位置へ寄せる。
+    // すでに見えている場合はスクロールしない (手動スクロールを不要に動かさない)。
+    LaunchedEffect(autoScrollTargetId, targetBounds) {
+        if (autoScrollTargetId == null || targetBounds == null) return@LaunchedEffect
+        val viewport = scrollState.viewportSize
+        if (viewport <= 0) return@LaunchedEffect
+        val margin = with(density) { 16.dp.toPx() }
+        val (chipLeft, chipWidth) = targetBounds
+        val chipRight = chipLeft + chipWidth
+        val visibleStart = scrollState.value.toFloat()
+        val visibleEnd = visibleStart + viewport
+        when {
+            chipLeft < visibleStart + margin ->
+                scrollState.animateScrollTo((chipLeft - margin).toInt().coerceAtLeast(0))
+            chipRight > visibleEnd - margin ->
+                scrollState.animateScrollTo((chipRight + margin - viewport).toInt().coerceAtLeast(0))
+        }
+    }
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -1259,7 +1292,7 @@ private fun TagFilterSection(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
+                .horizontalScroll(scrollState),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
@@ -1278,6 +1311,10 @@ private fun TagFilterSection(
                     selected = state.selectedFilterTagIds.contains(tag.tagId),
                     onClick = { onToggle(tag.tagId) },
                     label = { Text(tag.name) },
+                    modifier = Modifier.onGloballyPositioned { coords ->
+                        chipBounds[tag.tagId] =
+                            coords.positionInParent().x to coords.size.width.toFloat()
+                    },
                 )
             }
             // いずれかの絞り込みが効いている時だけ、まとめて解除できるようにする
