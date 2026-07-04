@@ -531,9 +531,8 @@ fun AppListScreen(
                     }) {
                         Text("一覧に戻る")
                     }
-                    TextButton(onClick = { showTagManagement = !showTagManagement }) {
-                        Text(if (showTagManagement) "閉じる" else "タグ管理")
-                    }
+                    // タグ管理はタイトル行には置かない。通常起動と同じく一覧上部の ⋯ メニューから開く
+                    // (編集モードは simplified=false のため ⋯ メニューが表示される)。
                 }
                 ShortcutUiMode.None -> {
                     // 通常画面では低頻度操作を一覧上部の ⋯ メニューへ寄せる。
