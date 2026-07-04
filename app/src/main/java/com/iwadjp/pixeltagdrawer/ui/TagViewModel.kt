@@ -268,6 +268,16 @@ class TagViewModel(application: Application) : AndroidViewModel(application) {
         prefs.showUntaggedOnly = false
     }
 
+    /**
+     * 単一選択中のタグを別タグへ「置き換える」(前/次ボタンによる前後遷移用)。
+     * toggleFilterTag と異なり、同じ tagId を渡してもトグルオフせず単一選択として保持する。
+     */
+    fun selectSingleFilterTag(tagId: Long) {
+        _uiState.update { it.copy(selectedFilterTagIds = setOf(tagId), showUntaggedOnly = false) }
+        prefs.saveFilterTagIds(_uiState.value.selectedFilterTagIds)
+        prefs.showUntaggedOnly = false
+    }
+
     /** 複数タグAND絞り込みモードのON/OFFを切り替える。 */
     fun toggleMultiSelectFilter() {
         setMultiSelectFilter(!_uiState.value.multiSelectFilter)

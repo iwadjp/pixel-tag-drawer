@@ -576,31 +576,71 @@ fun AppListScreen(
             )
         }
 
-        // 検索欄はアプリが読み込まれているときだけ表示する
+        // タグ行表示中かつ単一タグ選択中だけ、前/次遷移 (表示順で±1、端は循環) を有効にする。
+        // 複数選択・未選択・タグなし絞り込み・遷移先なし (タグ1件) では無効 (◀▶ボタン非表示)。
+        val tagRowVisible = tagState.tags.isNotEmpty() && !simplified
+        val singleTagNavEnabled = tagRowVisible && !tagState.showUntaggedOnly &&
+            tagState.selectedFilterTagIds.size == 1 && tagState.tags.size > 1
+        val selectAdjacentTag: (Int) -> Unit = { delta ->
+            val tags = tagState.tags
+            val currentId = tagState.selectedFilterTagIds.firstOrNull()
+            val currentIndex = tags.indexOfFirst { it.tagId == currentId }
+            if (currentIndex >= 0) {
+                val nextIndex = (currentIndex + delta + tags.size) % tags.size
+                PerfLog.log("[LM] tag nav delta=$delta tagId=${tags[nextIndex].tagId}")
+                tagViewModel.selectSingleFilterTag(tags[nextIndex].tagId)
+            }
+        }
+
+        // 検索欄はアプリが読み込まれているときだけ表示する。
+        // 単一タグ選択中は検索欄を少し短くし、右側に前/次タグの ◀▶ ボタンを出す。
         if (uiState.apps.isNotEmpty()) {
-            OutlinedTextField(
-                value = uiState.query,
-                onValueChange = viewModel::updateQuery,
-                singleLine = true,
-                label = { Text("アプリ名 / パッケージ名で検索") },
-                // 入力があるときだけ、一発クリアできるボタンを出す
-                trailingIcon = if (uiState.query.isNotEmpty()) {
-                    {
-                        IconButton(onClick = { viewModel.updateQuery("") }) {
-                            Text("✕")
-                        }
-                    }
-                } else {
-                    null
-                },
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 4.dp),
-            )
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                OutlinedTextField(
+                    value = uiState.query,
+                    onValueChange = viewModel::updateQuery,
+                    singleLine = true,
+                    label = { Text("アプリ名 / パッケージ名で検索") },
+                    // 入力があるときだけ、一発クリアできるボタンを出す
+                    trailingIcon = if (uiState.query.isNotEmpty()) {
+                        {
+                            IconButton(onClick = { viewModel.updateQuery("") }) {
+                                Text("✕")
+                            }
+                        }
+                    } else {
+                        null
+                    },
+                    modifier = Modifier.weight(1f),
+                )
+                if (singleTagNavEnabled) {
+                    IconButton(
+                        onClick = { selectAdjacentTag(-1) },
+                        modifier = Modifier
+                            .size(36.dp)
+                            .semantics { contentDescription = "前のタグ" },
+                    ) {
+                        Text("◀", style = MaterialTheme.typography.labelLarge)
+                    }
+                    IconButton(
+                        onClick = { selectAdjacentTag(+1) },
+                        modifier = Modifier
+                            .size(36.dp)
+                            .semantics { contentDescription = "次のタグ" },
+                    ) {
+                        Text("▶", style = MaterialTheme.typography.labelLarge)
+                    }
+                }
+            }
         }
 
         // 絞り込みチップはタグがあり、かつショートカット簡素表示でないときだけ表示する
-        if (tagState.tags.isNotEmpty() && !simplified) {
+        if (tagRowVisible) {
             TagFilterSection(
                 state = tagState,
                 onToggle = { tagId ->
