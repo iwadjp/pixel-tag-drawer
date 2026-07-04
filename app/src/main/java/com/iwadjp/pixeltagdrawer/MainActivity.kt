@@ -614,10 +614,14 @@ fun AppListScreen(
         // 検索欄はアプリが読み込まれているときだけ表示する。
         // 単一タグ選択中は検索欄を少し短くし、右側に前/次タグの ◀▶ ボタンを出す。
         if (uiState.apps.isNotEmpty()) {
+            // 検索BOX直下の見た目の余白を、次セクションがタグ行でも操作行でも約6dpに揃える。
+            // タグ行あり: spacedBy 4dp + タグ行の上 2dp = 6dp。
+            // タグ行なし (簡素表示など): 直後の操作行が offset(y=-6dp) で上に詰めて描画されるため、
+            // そのままだと見た目ほぼ0dpになる。8dp 足して 4+8-6 = 6dp に合わせる。
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 4.dp),
+                    .padding(top = 4.dp, bottom = if (tagRowVisible) 0.dp else 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 OutlinedTextField(
