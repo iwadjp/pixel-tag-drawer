@@ -9,7 +9,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 /**
  * タグDB。launcher_apps / tags / app_tags を保持する。
- * version = 2 (launcher_apps に起動履歴 launchCount / lastLaunchedAt を追加)。
+ * version = 3 (tags に displayLabel を追加し、sortOrder を表示順で backfill)。
  */
 @Database(
     entities = [
@@ -17,7 +17,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         TagEntity::class,
         AppTagCrossRef::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = false,
 )
 abstract class PixelTagDrawerDatabase : RoomDatabase() {
@@ -40,6 +40,28 @@ abstract class PixelTagDrawerDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v2→v3: tags に displayLabel (nullable) を追加し、
+         * sortOrder を現在の表示順 (sortOrder ASC, name COLLATE NOCASE ASC, tagId ASC)
+         * のまま 0..n-1 に backfill する。既存データは保持する。
+         * sortOrder 自身を更新するため、順位は一時テーブルに確定してから書き戻す。
+         */
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE tags ADD COLUMN displayLabel TEXT")
+                db.execSQL(
+                    "CREATE TEMP TABLE _tag_order AS " +
+                        "SELECT tagId FROM tags " +
+                        "ORDER BY sortOrder ASC, name COLLATE NOCASE ASC, tagId ASC"
+                )
+                db.execSQL(
+                    "UPDATE tags SET sortOrder = " +
+                        "(SELECT _tag_order.rowid - 1 FROM _tag_order WHERE _tag_order.tagId = tags.tagId)"
+                )
+                db.execSQL("DROP TABLE _tag_order")
+            }
+        }
+
         @Volatile
         private var instance: PixelTagDrawerDatabase? = null
 
@@ -49,7 +71,7 @@ abstract class PixelTagDrawerDatabase : RoomDatabase() {
                     context.applicationContext,
                     PixelTagDrawerDatabase::class.java,
                     DB_NAME,
-                ).addMigrations(MIGRATION_1_2).build().also { instance = it }
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build().also { instance = it }
             }
         }
     }

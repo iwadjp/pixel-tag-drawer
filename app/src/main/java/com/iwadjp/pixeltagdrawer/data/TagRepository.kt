@@ -20,13 +20,14 @@ class TagRepository(context: Context) {
 
     /**
      * タグを作成する。name は trim し、空文字なら挿入しない。
+     * sortOrder は MAX+1 で末尾に追加する。
      * 重複 (name unique) は IGNORE のためクラッシュしない。
      * @return 挿入された tagId。未挿入 (空文字 or 重複) の場合は -1。
      */
     suspend fun createTag(name: String): Long {
         val trimmed = name.trim()
         if (trimmed.isEmpty()) return -1L
-        return tagDao.insert(TagEntity(name = trimmed, sortOrder = 0))
+        return tagDao.insert(TagEntity(name = trimmed, sortOrder = tagDao.nextSortOrder()))
     }
 
     /** タグを削除する。 */
@@ -42,6 +43,20 @@ class TagRepository(context: Context) {
         if (trimmed.isEmpty()) return 0
         return tagDao.updateTagName(tagId, trimmed)
     }
+
+    /**
+     * 横スクロール用の表示名を変更する。blank は null (未設定=name 表示) に正規化する。
+     * @return 更新された行数。
+     */
+    suspend fun updateDisplayLabel(tagId: Long, displayLabel: String?): Int =
+        tagDao.updateDisplayLabel(tagId, displayLabel?.trim()?.ifEmpty { null })
+
+    /**
+     * タグの sortOrder を更新する (▲▼ 並び替え用)。
+     * @return 更新された行数。
+     */
+    suspend fun updateSortOrder(tagId: Long, sortOrder: Int): Int =
+        tagDao.updateSortOrder(tagId, sortOrder)
 
     /** アプリ (packageName + className) にタグを付与する。重複は IGNORE。 */
     suspend fun assignTag(packageName: String, className: String, tagId: Long) =

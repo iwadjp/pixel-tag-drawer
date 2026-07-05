@@ -28,4 +28,16 @@ interface TagDao {
 
     @Query("SELECT * FROM tags ORDER BY sortOrder ASC, name COLLATE NOCASE ASC")
     fun observeAll(): Flow<List<TagEntity>>
+
+    /** 新規タグを末尾に追加するための次の sortOrder (空なら 0)。 */
+    @Query("SELECT COALESCE(MAX(sortOrder) + 1, 0) FROM tags")
+    suspend fun nextSortOrder(): Int
+
+    /** 横スクロール用の表示名を更新する。null で未設定 (=name 表示) に戻す。 */
+    @Query("UPDATE tags SET displayLabel = :displayLabel WHERE tagId = :tagId")
+    suspend fun updateDisplayLabel(tagId: Long, displayLabel: String?): Int
+
+    /** 指定タグの sortOrder を更新する (▲▼ 並び替え用)。 */
+    @Query("UPDATE tags SET sortOrder = :sortOrder WHERE tagId = :tagId")
+    suspend fun updateSortOrder(tagId: Long, sortOrder: Int): Int
 }
