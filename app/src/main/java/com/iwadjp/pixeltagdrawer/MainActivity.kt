@@ -414,12 +414,18 @@ fun AppListScreen(
             is LaunchFilter.Tag -> {
                 // ショートカット由来は非永続。通常モードの手動フィルタ prefs を汚さない。
                 tagViewModel.applyShortcutFilterTag(launchFilter.tagId)
+                // 絞り込み起動の初期ソートは保存値に関係なく名前順 (非永続)。
+                // ショートカットタスクは excludeFromRecents のため「ホーム→復帰」は必ず
+                // ショートカット再タップ (onNewIntent 再配送 or 再生成) として届く。そこで
+                // 再適用の抑止は seq ではなく VM 生存中の once フラグで行い、一時ソートを維持する。
+                viewModel.applyFilteredLaunchInitialSortOnce()
                 uiMode = ShortcutUiMode.Simplified
                 foldEditing()
                 PerfLog.log("[LM] branch=shortcut filter applied -> uiMode=Simplified, transient (reason=shortcut intent)")
             }
             LaunchFilter.Untagged -> {
                 tagViewModel.applyShortcutUntaggedFilter()
+                viewModel.applyFilteredLaunchInitialSortOnce()
                 uiMode = ShortcutUiMode.Simplified
                 foldEditing()
                 PerfLog.log("[LM] branch=shortcut untagged applied -> uiMode=Simplified, transient (reason=shortcut intent)")
@@ -431,11 +437,16 @@ fun AppListScreen(
                         // 保存済みの手動フィルタを復元する (手動フィルタは消さない)。
                         uiMode = ShortcutUiMode.None
                         tagViewModel.restoreManualFilters()
+                        // 同一プロセスに絞り込み起動の一時ソートが残っていても、通常起動は保存値へ戻す。
+                        viewModel.restoreSavedSortMode()
                         foldEditing()
                         PerfLog.log("[LM] branch=normal new intent reset -> uiMode=None, restoreManualFilters (reason=normal intent reset)")
                     }
                     initialNormalLauncher -> {
                         // 通常アイコンの明示起動 (新規 onCreate 経由): こちらも手動フィルタを復元する。
+                        // 注: ここでは restoreSavedSortMode を呼ばない。冷間起動時は VM init が
+                        // prefs から初期化済みで、権限チェック完了前に setSortMode を通すと
+                        // Recent/Count が誤って Name に落ちるため (usageStatsAccessGranted は非同期確定)。
                         uiMode = ShortcutUiMode.None
                         tagViewModel.restoreManualFilters()
                         foldEditing()
@@ -519,6 +530,8 @@ fun AppListScreen(
                                 // 絞り込み起動でない場合 (通常は到達しない): 従来どおり現在の条件を維持する
                             }
                         }
+                        // 一時ソートも起動時の初期値 (名前順) へ戻す。保存ソート (prefs) は変更しない。
+                        viewModel.setSortMode(AppSortMode.Name, persist = false)
                         showTagManagement = false
                         tagEditMode = false
                         selectedBulkApps = emptySet()
@@ -820,6 +833,9 @@ fun AppListScreen(
                             TextButton(onClick = { sortMenuExpanded = true }) {
                                 Text("$sortLabel ▼")
                             }
+                            // 通常モード (None) の変更だけ永続化する。
+                            // 絞り込み起動中 (Simplified/Editing) の変更は一時的で、保存ソートを汚さない。
+                            val persistSort = uiMode == ShortcutUiMode.None
                             DropdownMenu(
                                 expanded = sortMenuExpanded,
                                 onDismissRequest = { sortMenuExpanded = false },
@@ -828,7 +844,7 @@ fun AppListScreen(
                                     text = { Text("名前順") },
                                     onClick = {
                                         sortMenuExpanded = false
-                                        viewModel.setSortMode(AppSortMode.Name)
+                                        viewModel.setSortMode(AppSortMode.Name, persist = persistSort)
                                     },
                                 )
                                 DropdownMenuItem(
@@ -836,7 +852,7 @@ fun AppListScreen(
                                     enabled = uiState.usageStatsAccessGranted,
                                     onClick = {
                                         sortMenuExpanded = false
-                                        viewModel.setSortMode(AppSortMode.Recent)
+                                        viewModel.setSortMode(AppSortMode.Recent, persist = persistSort)
                                     },
                                 )
                                 DropdownMenuItem(
@@ -844,7 +860,7 @@ fun AppListScreen(
                                     enabled = uiState.usageStatsAccessGranted,
                                     onClick = {
                                         sortMenuExpanded = false
-                                        viewModel.setSortMode(AppSortMode.Count)
+                                        viewModel.setSortMode(AppSortMode.Count, persist = persistSort)
                                     },
                                 )
                                 DropdownMenuItem(

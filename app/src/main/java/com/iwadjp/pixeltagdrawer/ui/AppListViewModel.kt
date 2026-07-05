@@ -36,7 +36,7 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
     private var loadGeneration = 0
 
     init {
-        PerfLog.log("AppListViewModel init")
+        PerfLog.log("AppListViewModel init (prefs.appSortMode=${prefs.appSortMode} initialSort=${_uiState.value.sortMode.prefValue})")
         refresh()
     }
 
@@ -293,20 +293,64 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    /** 並び順を変更し永続化する。同じ値なら何もしない。 */
-    fun setSortMode(mode: AppSortMode) {
+    /**
+     * 並び順を変更する。同じ値なら何もしない。
+     * persist=true (通常起動): prefs.appSortMode へ永続化する。
+     * persist=false (タグ絞り込み起動中の一時変更): state のみ更新し、prefs は汚さない。
+     * UsageStats 権限なしで Recent/Count を要求された場合の Name fallback も同じ persist 規則に従う。
+     */
+    fun setSortMode(mode: AppSortMode, persist: Boolean = true) {
         if (mode != AppSortMode.Name && !_uiState.value.usageStatsAccessGranted) {
             if (_uiState.value.sortMode != AppSortMode.Name) {
                 _uiState.update { it.copy(sortMode = AppSortMode.Name) }
-                prefs.appSortMode = AppSortMode.Name.prefValue
+                if (persist) prefs.appSortMode = AppSortMode.Name.prefValue
             }
-            PerfLog.log("[USAGE] sort mode blocked mode=${mode.prefValue} reason=usage_access_missing")
+            PerfLog.log("[USAGE] sort mode blocked mode=${mode.prefValue} reason=usage_access_missing persist=$persist")
             return
         }
         if (_uiState.value.sortMode == mode) return
+        val previous = _uiState.value.sortMode
         _uiState.update { it.copy(sortMode = mode) }
-        prefs.appSortMode = mode.prefValue
-        PerfLog.log("[SORT] sort mode changed mode=${mode.prefValue}")
+        if (persist) prefs.appSortMode = mode.prefValue
+        PerfLog.log(
+            "[SORT] sort mode changed ${previous.prefValue}->${mode.prefValue} " +
+                "persist=$persist granted=${_uiState.value.usageStatsAccessGranted}",
+        )
+    }
+
+    // 絞り込み起動の「初期ソート=名前順」を適用済みか。
+    // ショートカット再タップ (onNewIntent 再配送) やタスク復帰では再適用しないよう、
+    // Activity/Compose ではなく VM (プロセス) 生存中のフラグで持つ。
+    // 通常起動へ戻った時 (restoreSavedSortMode) にリセットし、次の絞り込みセッションで再び名前順から始める。
+    private var filteredLaunchSortInitialized = false
+
+    /**
+     * 絞り込み起動の初期ソート (名前順・非永続) を適用する。
+     * VM 生存中の絞り込みセッションにつき初回だけ効き、2回目以降 (ショートカット再タップによる
+     * Intent 再配送・Activity 再生成) では何もしない = ユーザーの一時ソートを維持する。
+     * プロセス再生成後は VM が作り直されるため、改めて名前順から始まる。
+     */
+    fun applyFilteredLaunchInitialSortOnce() {
+        if (filteredLaunchSortInitialized) {
+            PerfLog.log("[SORT] filtered initial sort skipped (already initialized, keep temp sort=${_uiState.value.sortMode.prefValue})")
+            return
+        }
+        filteredLaunchSortInitialized = true
+        PerfLog.log("[SORT] filtered initial sort apply mode=name (transient)")
+        setSortMode(AppSortMode.Name, persist = false)
+    }
+
+    /**
+     * 保存済みソート (prefs.appSortMode) を state へ復元する。prefs は変更しない。
+     * ショートカット起動の一時ソートが残った同一プロセスで、通常起動へ戻った時に使う。
+     * 絞り込みセッションを終えるので、初期ソート適用フラグもリセットする。
+     * 権限なしで保存値が Recent/Count の場合は setSortMode の fallback で Name になる (prefs は汚さない)。
+     */
+    fun restoreSavedSortMode() {
+        filteredLaunchSortInitialized = false
+        val saved = AppSortMode.fromPrefValue(prefs.appSortMode)
+        PerfLog.log("[SORT] restore saved sort mode=${saved.prefValue} (from prefs, transient)")
+        setSortMode(saved, persist = false)
     }
 
     /** 検索文字列を更新する。絞り込みは UiState.filteredApps が行う。 */
