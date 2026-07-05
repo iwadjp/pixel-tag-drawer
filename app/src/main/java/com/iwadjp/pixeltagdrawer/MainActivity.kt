@@ -73,6 +73,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
@@ -709,8 +710,15 @@ fun AppListScreen(
             val previous = previousScrollSortMode
             previousScrollSortMode = effectiveSortMode
             if (previous != null && previous != effectiveSortMode) {
-                listState.scrollToItem(0)
-                gridState.scrollToItem(0)
+                // 表示中の state を先に戻す。非表示側の state への scrollToItem は
+                // remeasure 先がなく完了しないことがあるため、後回しにして表示側を確実に戻す。
+                if (displayMode == AppDisplayMode.Grid) {
+                    gridState.scrollToItem(0)
+                    listState.scrollToItem(0)
+                } else {
+                    listState.scrollToItem(0)
+                    gridState.scrollToItem(0)
+                }
             }
         }
         val usageStatsKey = remember(searchFilteredApps) {
@@ -739,6 +747,57 @@ fun AppListScreen(
                 }
             }
             sortApps(tagFiltered, effectiveSortMode)
+        }
+        // アプリの「並びだけ」を表すキー (usage 値は含めない)。並び替わり検出に使う。
+        val appOrderKey = remember(sortedApps) {
+            sortedApps.joinToString(separator = "|") { "${it.packageName}/${it.className}" }
+        }
+        // 最近/回数順の「上位アプリへ早くアクセスする」を最優先するための先頭貼り直し。
+        // 背景1: items(key=...) のキー追従で、並び替わり時にビューポートが旧先頭アイテムへ追従して
+        //   下へ流れる (使うたびに蓄積し中位表示になる)。
+        // 背景2: rememberLazyListState/GridState は saveable のため、Activity 再生成のたびに
+        //   蓄積済みドリフト位置が復元される。一方 previousAppOrderKey (remember) は null に戻るので、
+        //   「並び変化時のみ」の判定では初回 compose で一度も貼り直されない。
+        // 対応: Recent/Count では「初回 compose (起動・再生成復帰)」と「並び変化時」の両方で先頭へ戻す。
+        // 名前順は並びがほぼ安定 (追加/削除程度) のため、復元位置を尊重して貼り直さない。
+        // 手動スクロール操作中は邪魔しない。
+        var previousAppOrderKey by remember { mutableStateOf<String?>(null) }
+        LaunchedEffect(appOrderKey) {
+            val previous = previousAppOrderKey
+            previousAppOrderKey = appOrderKey
+            if (effectiveSortMode == AppSortMode.Name) return@LaunchedEffect
+            val initial = previous == null
+            val orderChanged = previous != null && previous != appOrderKey
+            if (!initial && !orderChanged) return@LaunchedEffect
+            // 表示中の displayMode 側の state だけを判定・操作する。
+            // 非表示側の LazyColumn/Grid は composition に存在せず、その state への
+            // scrollToItem は remeasure 先がなく完了しないことがある (done が出ずに止まる)。
+            val isGrid = displayMode == AppDisplayMode.Grid
+            val before = if (isGrid) gridState.firstVisibleItemIndex else listState.firstVisibleItemIndex
+            val scrolling = if (isGrid) gridState.isScrollInProgress else listState.isScrollInProgress
+            val top3 = sortedApps.take(3).joinToString(",") { it.label.take(12) }
+            PerfLog.log(
+                "[SORT] re-pin check mode=${effectiveSortMode.prefValue} display=$displayMode " +
+                    "initial=$initial changed=$orderChanged " +
+                    "prevHash=${previous?.hashCode() ?: 0} curHash=${appOrderKey.hashCode()} " +
+                    "before=$before scrolling=$scrolling top3=[$top3]",
+            )
+            // 初回 compose で既に先頭なら何もしない (冷間起動の通常ケース)
+            if (initial && before == 0) {
+                PerfLog.log("[SORT] re-pin skip (initial at top)")
+                return@LaunchedEffect
+            }
+            if (scrolling) {
+                PerfLog.log("[SORT] re-pin skip (scroll in progress)")
+                return@LaunchedEffect
+            }
+            if (isGrid) gridState.scrollToItem(0) else listState.scrollToItem(0)
+            // 同フレームの後続レイアウトでキー追従が位置を引き戻す可能性への保険として、
+            // 1フレーム待ってからもう一度先頭を確定する。
+            withFrameNanos { }
+            if (isGrid) gridState.scrollToItem(0) else listState.scrollToItem(0)
+            val after = if (isGrid) gridState.firstVisibleItemIndex else listState.firstVisibleItemIndex
+            PerfLog.log("[SORT] re-pin done display=$displayMode after=$after")
         }
         LaunchedEffect(effectiveSortMode, sortedApps, simplified) {
             val first = sortedApps.firstOrNull()
