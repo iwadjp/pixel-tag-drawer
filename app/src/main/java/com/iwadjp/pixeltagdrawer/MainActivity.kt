@@ -562,6 +562,7 @@ fun AppListScreen(
                 onMoveUp = tagViewModel::moveTagUp,
                 onMoveDown = tagViewModel::moveTagDown,
                 onEditingNameChange = tagViewModel::updateEditingTagName,
+                onEditingDisplayLabelChange = tagViewModel::updateEditingTagDisplayLabel,
                 onConfirmRename = tagViewModel::confirmRenameTag,
                 onCancelRename = tagViewModel::cancelRenameTag,
                 onPinTag = { tag ->
@@ -1054,6 +1055,7 @@ private fun TagSection(
     onMoveUp: (com.iwadjp.pixeltagdrawer.data.db.TagEntity) -> Unit,
     onMoveDown: (com.iwadjp.pixeltagdrawer.data.db.TagEntity) -> Unit,
     onEditingNameChange: (String) -> Unit,
+    onEditingDisplayLabelChange: (String) -> Unit,
     onConfirmRename: () -> Unit,
     onCancelRename: () -> Unit,
     onPinTag: (com.iwadjp.pixeltagdrawer.data.db.TagEntity) -> Unit,
@@ -1131,24 +1133,35 @@ private fun TagSection(
             ) {
             state.tags.forEachIndexed { index, tag ->
                 if (state.editingTag?.tagId == tag.tagId) {
-                    // 編集中: 名前入力欄 + 保存 / キャンセル
-                    Row(
+                    // 編集中: 正式タグ名 + チップ用表示名 (空欄なら name 表示) + 保存 / キャンセル
+                    Column(
                         modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
                         OutlinedTextField(
                             value = state.editingTagName,
                             onValueChange = onEditingNameChange,
                             singleLine = true,
                             label = { Text("タグ名") },
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.fillMaxWidth(),
                         )
-                        TextButton(onClick = onConfirmRename) {
-                            Text("保存")
-                        }
-                        TextButton(onClick = onCancelRename) {
-                            Text("キャンセル")
+                        OutlinedTextField(
+                            value = state.editingTagDisplayLabel,
+                            onValueChange = onEditingDisplayLabelChange,
+                            singleLine = true,
+                            label = { Text("表示名 (空欄ならタグ名を表示)") },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End,
+                        ) {
+                            TextButton(onClick = onConfirmRename) {
+                                Text("保存")
+                            }
+                            TextButton(onClick = onCancelRename) {
+                                Text("キャンセル")
+                            }
                         }
                     }
                 } else {
@@ -1157,11 +1170,20 @@ private fun TagSection(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
-                        Text(
-                            text = "# ${tag.name}",
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.weight(1f),
-                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "# ${tag.name}",
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            // 表示名が設定されているタグだけ、チップでの見え方を補助表示する
+                            tag.displayLabel?.takeIf { it.isNotBlank() }?.let { label ->
+                                Text(
+                                    text = "表示: $label",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
                         // ▲▼ で表示順を1つずつ移動する。先頭の▲・末尾の▼は無効。
                         IconButton(
                             onClick = { onMoveUp(tag) },
@@ -1351,7 +1373,8 @@ private fun TagFilterSection(
                 FilterChip(
                     selected = state.selectedFilterTagIds.contains(tag.tagId),
                     onClick = { onToggle(tag.tagId) },
-                    label = { Text(tag.name) },
+                    // チップだけ短い表示名 (displayLabel) を優先し、未設定/空白なら正式タグ名
+                    label = { Text(tag.displayLabel?.takeIf { it.isNotBlank() } ?: tag.name) },
                     modifier = Modifier.onGloballyPositioned { coords ->
                         chipBounds[tag.tagId] =
                             coords.positionInParent().x to coords.size.width.toFloat()

@@ -27,6 +27,8 @@ data class TagUiState(
     val editingTag: TagEntity? = null,
     // 名前変更中の入力値
     val editingTagName: String = "",
+    // 編集中の横スクロールチップ用表示名の入力値 (空欄なら name 表示)
+    val editingTagDisplayLabel: String = "",
     // タグ付与/解除の Undo/Redo 可否 (メモリ上の履歴に基づく)
     val canUndo: Boolean = false,
     val canRedo: Boolean = false,

@@ -362,9 +362,16 @@ class TagViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** タグの名前変更を開始する。既存名を入力欄に入れる。 */
+    /** タグの編集 (名前・表示名) を開始する。既存値を入力欄に入れる。 */
     fun startRenameTag(tag: TagEntity) {
-        _uiState.update { it.copy(editingTag = tag, editingTagName = tag.name, message = null) }
+        _uiState.update {
+            it.copy(
+                editingTag = tag,
+                editingTagName = tag.name,
+                editingTagDisplayLabel = tag.displayLabel.orEmpty(),
+                message = null,
+            )
+        }
     }
 
     /** 名前変更中の入力値を更新する。 */
@@ -372,19 +379,28 @@ class TagViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update { it.copy(editingTagName = name) }
     }
 
+    /** 編集中の表示名 (チップ用) の入力値を更新する。 */
+    fun updateEditingTagDisplayLabel(label: String) {
+        _uiState.update { it.copy(editingTagDisplayLabel = label) }
+    }
+
     /** 名前変更をキャンセルする。 */
     fun cancelRenameTag() {
-        _uiState.update { it.copy(editingTag = null, editingTagName = "", message = null) }
+        _uiState.update {
+            it.copy(editingTag = null, editingTagName = "", editingTagDisplayLabel = "", message = null)
+        }
     }
 
     /**
-     * 名前変更を確定する。
+     * 編集 (名前・表示名) を確定する。
      * trim・空文字スキップ・重複IGNORE は TagRepository.renameTag が担保。
-     * 成功時は編集状態を解除し、未更新時は短いメッセージを出す。
+     * 表示名は blank なら null 保存 (=チップは name 表示) を TagRepository.updateDisplayLabel が担保。
+     * 名前が重複で保存できなかった場合は表示名も保存せず、編集状態を維持する。
      */
     fun confirmRenameTag() {
         val tag = _uiState.value.editingTag ?: return
         val name = _uiState.value.editingTagName
+        val displayLabel = _uiState.value.editingTagDisplayLabel
         viewModelScope.launch {
             try {
                 if (name.trim().isEmpty()) {
@@ -392,16 +408,19 @@ class TagViewModel(application: Application) : AndroidViewModel(application) {
                     return@launch
                 }
                 val rows = repository.renameTag(tag.tagId, name)
+                if (rows > 0) {
+                    repository.updateDisplayLabel(tag.tagId, displayLabel)
+                }
                 _uiState.update {
                     if (rows > 0) {
-                        it.copy(editingTag = null, editingTagName = "", message = null)
+                        it.copy(editingTag = null, editingTagName = "", editingTagDisplayLabel = "", message = null)
                     } else {
                         it.copy(message = "同名のタグが既にあります")
                     }
                 }
             } catch (e: Exception) {
-                Log.w(TAG, "タグ名の変更に失敗しました", e)
-                _uiState.update { it.copy(message = "タグ名の変更に失敗しました") }
+                Log.w(TAG, "タグの編集に失敗しました", e)
+                _uiState.update { it.copy(message = "タグの編集に失敗しました") }
             }
         }
     }
