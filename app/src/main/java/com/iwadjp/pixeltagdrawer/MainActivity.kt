@@ -726,6 +726,16 @@ fun AppListScreen(
                 "${app.packageName}/${app.className}:${app.usageLaunchCount}:${app.usageLastUsedAt}"
             }
         }
+        // icon 後追いロード中の不要な再ソート抑制。icon batch のたびに apps のインスタンスが
+        // 変わり remember が再計算されるが、icon はどのソートキーにも影響しない。
+        // 並びに影響する入力 (mode / 対象集合 / label / usage値) の署名が前回と同じなら、
+        // 再ソートせず前回の並び順に新インスタンス (icon 差し替え済み) を並べ直すだけにする。
+        // plain holder にするのは、composition 中の書き込みで再compose を誘発しないため。
+        class SortOrderCache {
+            var signature: String? = null
+            var order: List<String>? = null
+        }
+        val sortOrderCache = remember { SortOrderCache() }
         val sortedApps = remember(
             searchFilteredApps,
             tagState.selectedFilterTagIds,
@@ -746,7 +756,28 @@ fun AppListScreen(
                     appTags.containsAll(selected)
                 }
             }
-            sortApps(tagFiltered, effectiveSortMode)
+            // 並びに影響する入力だけの署名 (icon は含めない)。Name は label、
+            // Recent/Count は usage 値がソートキーのため、その全てと対象集合を含める。
+            val signature = effectiveSortMode.prefValue + "|" + tagFiltered.joinToString("|") {
+                "${it.packageName}/${it.className}:${it.label}:${it.usageLaunchCount}:${it.usageLastUsedAt}"
+            }
+            val cachedOrder = sortOrderCache.order
+            val result = if (signature == sortOrderCache.signature && cachedOrder != null) {
+                // icon 差し替えのみの更新: 既存順を維持して並べ直すだけで再ソートしない
+                val byId = tagFiltered.associateBy { "${it.packageName}/${it.className}" }
+                val arranged = cachedOrder.mapNotNull { byId[it] }
+                if (arranged.size == tagFiltered.size) {
+                    arranged
+                } else {
+                    // 万一 id 集合が食い違ったら安全側で通常ソートに落とす
+                    sortApps(tagFiltered, effectiveSortMode)
+                }
+            } else {
+                sortApps(tagFiltered, effectiveSortMode)
+            }
+            sortOrderCache.signature = signature
+            sortOrderCache.order = result.map { "${it.packageName}/${it.className}" }
+            result
         }
         // アプリの「並びだけ」を表すキー (usage 値は含めない)。並び替わり検出に使う。
         val appOrderKey = remember(sortedApps) {
@@ -799,7 +830,9 @@ fun AppListScreen(
             val after = if (isGrid) gridState.firstVisibleItemIndex else listState.firstVisibleItemIndex
             PerfLog.log("[SORT] re-pin done display=$displayMode after=$after")
         }
-        LaunchedEffect(effectiveSortMode, sortedApps, simplified) {
+        // 並び (appOrderKey) が実際に変わった時だけ記録する。sortedApps インスタンスを key に
+        // すると icon batch のたびに同一の並びで連発してしまう。
+        LaunchedEffect(effectiveSortMode, appOrderKey, simplified) {
             val first = sortedApps.firstOrNull()
             PerfLog.log(
                 "[SORT] sort result mode=${effectiveSortMode.prefValue} " +
