@@ -1433,7 +1433,7 @@ private fun TagFilterSection(
                     selected = state.selectedFilterTagIds.contains(tag.tagId),
                     onClick = { onToggle(tag.tagId) },
                     // チップだけ短い表示名 (displayLabel) を優先し、未設定/空白なら正式タグ名
-                    label = { Text(tag.displayLabel?.takeIf { it.isNotBlank() } ?: tag.name) },
+                    label = { Text(tagChipLabel(tag)) },
                     modifier = Modifier.onGloballyPositioned { coords ->
                         chipBounds[tag.tagId] =
                             coords.positionInParent().x to coords.size.width.toFloat()
@@ -1517,6 +1517,10 @@ private enum class ShortcutUiMode { None, Simplified, Editing }
 /** アプリ一覧の表示モード。 */
 private enum class AppDisplayMode { List, Grid }
 
+/** タグチップの表示ラベル。displayLabel が null/blank なら正式タグ名 name にフォールバックする。 */
+private fun tagChipLabel(tag: com.iwadjp.pixeltagdrawer.data.db.TagEntity): String =
+    tag.displayLabel?.takeIf { it.isNotBlank() } ?: tag.name
+
 @Composable
 private fun BulkTagBar(
     tags: List<com.iwadjp.pixeltagdrawer.data.db.TagEntity>,
@@ -1563,7 +1567,7 @@ private fun BulkTagBar(
                         FilterChip(
                             selected = bulkTargetTagId == tag.tagId,
                             onClick = { onPickTag(tag.tagId) },
-                            label = { Text(tag.name) },
+                            label = { Text(tagChipLabel(tag)) },
                         )
                     }
                 }
