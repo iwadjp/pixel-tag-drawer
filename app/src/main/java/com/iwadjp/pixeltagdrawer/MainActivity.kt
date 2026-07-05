@@ -632,7 +632,7 @@ fun AppListScreen(
         }
 
         // 検索欄はアプリが読み込まれているときだけ表示する。
-        // 単一タグ選択中は検索欄を少し短くし、右側に前/次タグの ◀▶ ボタンを出す。
+        // 単一タグ選択中は検索欄を少し短くし、左側に前/次タグの ◀▶ ボタンを出す。
         if (uiState.apps.isNotEmpty()) {
             // 検索BOX直下の見た目の余白を、次セクションがタグ行でも操作行でも約6dpに揃える。
             // タグ行あり: spacedBy 4dp + タグ行の上 2dp = 6dp。
@@ -644,23 +644,6 @@ fun AppListScreen(
                     .padding(top = 4.dp, bottom = if (tagRowVisible) 0.dp else 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                OutlinedTextField(
-                    value = uiState.query,
-                    onValueChange = viewModel::updateQuery,
-                    singleLine = true,
-                    label = { Text("アプリ名 / パッケージ名で検索") },
-                    // 入力があるときだけ、一発クリアできるボタンを出す
-                    trailingIcon = if (uiState.query.isNotEmpty()) {
-                        {
-                            IconButton(onClick = { viewModel.updateQuery("") }) {
-                                Text("✕")
-                            }
-                        }
-                    } else {
-                        null
-                    },
-                    modifier = Modifier.weight(1f),
-                )
                 if (singleTagNavEnabled) {
                     IconButton(
                         onClick = { selectAdjacentTag(-1) },
@@ -679,6 +662,23 @@ fun AppListScreen(
                         Text("▶", style = MaterialTheme.typography.labelLarge)
                     }
                 }
+                OutlinedTextField(
+                    value = uiState.query,
+                    onValueChange = viewModel::updateQuery,
+                    singleLine = true,
+                    label = { Text("アプリ名 / パッケージ名で検索") },
+                    // 入力があるときだけ、一発クリアできるボタンを出す
+                    trailingIcon = if (uiState.query.isNotEmpty()) {
+                        {
+                            IconButton(onClick = { viewModel.updateQuery("") }) {
+                                Text("✕")
+                            }
+                        }
+                    } else {
+                        null
+                    },
+                    modifier = Modifier.weight(1f),
+                )
             }
         }
 
