@@ -1,6 +1,7 @@
 package com.iwadjp.pixeltagdrawer.ui
 
 import android.app.Application
+import android.os.SystemClock
 import android.util.Log
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.lifecycle.AndroidViewModel
@@ -106,7 +107,33 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
                 }
 
                 // icon は初期表示後に後追いロードして該当アプリへ反映する。
-                mergeUsageStats(generation)
+                // usage merge は「先に始まった方を優先」する: 冷間起動では ON_RESUME 由来の
+                // refreshUsageStats() が先行して usage を取得中/取得済みのことがあり (こちらの方が速い)、
+                // その場合は本体側の重複 merge をスキップする。
+                //  - 実行中スキップ: apps publish 済みなら、進行中の resume 側 merge が update 時点の
+                //    apps (公開済み) に反映するので本体側は不要。apps が空ならスキップしない
+                //    (resume 側が空リストに merge して usage 未反映になる恐れがあるため)。
+                //  - 完了済みスキップ: 直近2秒以内かつ applied>0。resume 側が publish 前の空リストに
+                //    merge していた場合 (applied=0) は usage 未反映なので、本体側で改めて実行する。
+                val mergeAge = SystemClock.elapsedRealtime() - lastUsageMergeAtMs
+                val publishedAppsCount = _uiState.value.apps.size
+                when {
+                    usageMergeInProgress && publishedAppsCount > 0 -> {
+                        PerfLog.log(
+                            "[USAGE] refresh-side merge skipped by in-flight merge apps=$publishedAppsCount",
+                        )
+                    }
+                    !usageMergeInProgress &&
+                        lastUsageMergeAtMs != 0L &&
+                        mergeAge < USAGE_REFRESH_MIN_INTERVAL_MS &&
+                        lastUsageMergeAppliedCount > 0 -> {
+                        PerfLog.log(
+                            "[USAGE] refresh-side merge skipped by earlier merge " +
+                                "ageMs=$mergeAge applied=$lastUsageMergeAppliedCount",
+                        )
+                    }
+                    else -> mergeUsageStats(generation)
+                }
                 loadIcons(list, generation)
             } catch (e: Exception) {
                 if (_uiState.value.initialSortSettling) {
@@ -123,7 +150,34 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    // 直近の mergeUsageStats 完了時刻 (elapsedRealtime)。プロセス内メモリのみで永続化しない。
+    // 冷間起動では refresh() 内の merge 直後に ON_RESUME 由来の refreshUsageStats() が必ず来て、
+    // usage クエリと apps 全件再インスタンス化が二重に走るため、短時間の再要求をスキップする。
+    @Volatile
+    private var lastUsageMergeAtMs = 0L
+
+    // usage merge が実行中かどうか (mergeUsageStats の実行区間で true)。
+    // 「先に始まった merge を優先」するための判定に使う。resume 側・本体側どちらの merge も
+    // この関数を通るため、実行中の再要求 (resume 連打等) はスキップされる。
+    @Volatile
+    private var usageMergeInProgress = false
+
+    // 直近の usage merge が「何件の apps に反映されたか」。resume 側 merge が apps publish 前の
+    // 空リストに走ってしまったケース (applied=0) を検出し、本体側 merge で救済するために使う。
+    @Volatile
+    private var lastUsageMergeAppliedCount = 0
+
     fun refreshUsageStats() {
+        if (usageMergeInProgress) {
+            PerfLog.log("[USAGE] usage refresh skipped merge in progress reason=resume")
+            return
+        }
+        val age = SystemClock.elapsedRealtime() - lastUsageMergeAtMs
+        if (lastUsageMergeAtMs != 0L && age < USAGE_REFRESH_MIN_INTERVAL_MS) {
+            PerfLog.log("[USAGE] usage refresh skipped recent merge ageMs=$age")
+            return
+        }
+        PerfLog.log("[USAGE] usage refresh start reason=resume")
         val generation = loadGeneration
         viewModelScope.launch {
             mergeUsageStats(generation)
@@ -131,6 +185,16 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
     }
 
     private suspend fun mergeUsageStats(generation: Int) {
+        usageMergeInProgress = true
+        try {
+            mergeUsageStatsInternal(generation)
+        } finally {
+            // 例外・generation不一致の早期return・権限なし分岐のいずれでも必ず解除する
+            usageMergeInProgress = false
+        }
+    }
+
+    private suspend fun mergeUsageStatsInternal(generation: Int) {
         val granted = withContext(Dispatchers.IO) { repository.hasUsageStatsAccess() }
         PerfLog.log("[USAGE] usage access granted=$granted")
         if (generation != loadGeneration) return
@@ -165,12 +229,15 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
                 prefs.appSortMode = AppSortMode.Name.prefValue
                 PerfLog.log("[USAGE] sort mode fallback mode=name reason=usage_access_missing")
             }
+            // 権限なしの確認も1回の merge 試行として扱い、直後の再要求をスキップ対象にする
+            lastUsageMergeAtMs = SystemClock.elapsedRealtime()
             return
         }
 
         val usageStats = withContext(Dispatchers.IO) { repository.loadUsageStats() }
         if (generation != loadGeneration) return
         val wasSettling = _uiState.value.initialSortSettling
+        var appliedCount = 0
         _uiState.update { state ->
             val mergedApps = state.apps.map { app ->
                 val usage = usageStats[app.packageName]
@@ -193,8 +260,11 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
                         "nonZeroCount=${mergedApps.count { it.usageLaunchCount > 0 }}",
                 )
             }
+            appliedCount = mergedApps.size
             state.copy(usageStatsAccessGranted = true, apps = mergedApps, initialSortSettling = false)
         }
+        lastUsageMergeAppliedCount = appliedCount
+        lastUsageMergeAtMs = SystemClock.elapsedRealtime()
     }
 
     /**
@@ -411,6 +481,8 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
         const val TAG = "AppListViewModel"
         // Recent/Count 起動時に usage stats を待つ上限。超えたら label-only 表示へフォールバック。
         const val SETTLING_TIMEOUT_MS = 1200L
+        // この間隔内の usage 再取得要求 (ON_RESUME 由来) はスキップする。冷間起動の二重取得対策。
+        const val USAGE_REFRESH_MIN_INTERVAL_MS = 2000L
         // icon 後追いロードの反映バッチ件数 (再描画を抑える)。
         const val ICON_FLUSH_BATCH = 12
     }

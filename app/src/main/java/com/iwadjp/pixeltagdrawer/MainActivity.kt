@@ -857,6 +857,24 @@ fun AppListScreen(
                 PerfLog.log("first visible filtered list count=${sortedApps.size}")
             }
         }
+        // 実表示計測: settling 解除後、一覧分岐が実際に表示された初回を1回だけ記録する。
+        // first visible filtered list は settling 中 (プレースホルダー表示) でも出るため、
+        // 実際に一覧が見え始めた目安としてはこちらを使う。effect はフレーム確定後に走るので
+        // タイムスタンプは描画完了の近似になる。1 composition につき1回のみ (連発しない)。
+        val perfSettledListLogged = remember { mutableStateOf(false) }
+        LaunchedEffect(uiState.initialSortSettling, sortedApps) {
+            if (!perfSettledListLogged.value &&
+                !uiState.initialSortSettling &&
+                sortedApps.isNotEmpty()
+            ) {
+                perfSettledListLogged.value = true
+                val top3 = sortedApps.take(3).joinToString(",") { it.label.take(12) }
+                PerfLog.log(
+                    "[UI] first visible settled list mode=${effectiveSortMode.prefValue} " +
+                        "display=$displayMode count=${sortedApps.size} top3=[$top3]",
+                )
+            }
+        }
 
         when {
             uiState.isLoading && uiState.apps.isEmpty() -> {
