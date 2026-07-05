@@ -275,7 +275,28 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
      */
     private fun loadIcons(apps: List<LauncherApp>, generation: Int) {
         viewModelScope.launch {
-            PerfLog.log("icon lazy load start count=${apps.size}")
+            // 初期画面の体感優先: アイコンは現在の表示順 (sortMode 順) の上位から読む。
+            // Recent/Count では usage merge (冷間起動では resume 側が進行中のことがある) の完了を
+            // 少しだけ待ってから順序を確定する。Name は usage 不要なので待たない。
+            // 待ちや並べ替えは「読み込み順」だけに影響し、UI の並び順・batch flush は変えない。
+            if (_uiState.value.sortMode != AppSortMode.Name) {
+                val waitStart = SystemClock.elapsedRealtime()
+                while ((usageMergeInProgress || _uiState.value.initialSortSettling) &&
+                    SystemClock.elapsedRealtime() - waitStart < ICON_ORDER_WAIT_TIMEOUT_MS
+                ) {
+                    delay(50)
+                }
+            }
+            // 反復順のスナップショット。usage 反映済みの state.apps を優先し、
+            // (別 generation 等で) 件数が合わない場合はロード時のリストで従来どおり読む。
+            val stateApps = _uiState.value.apps
+            val orderSource = if (stateApps.size == apps.size) stateApps else apps
+            val orderedApps = sortApps(orderSource, _uiState.value.sortMode)
+            val top3 = orderedApps.take(3).joinToString(",") { it.label.take(12) }
+            PerfLog.log(
+                "icon lazy load start count=${orderedApps.size} " +
+                    "mode=${_uiState.value.sortMode.prefValue} top3=[$top3]",
+            )
             val pending = HashMap<String, ImageBitmap>()
             var loaded = 0
             var failed = 0
@@ -302,7 +323,7 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
                 }
             }
 
-            for (app in apps) {
+            for (app in orderedApps) {
                 if (generation != loadGeneration) return@launch
                 val icon = withContext(Dispatchers.IO) {
                     repository.loadIcon(app.packageName, app.className)
@@ -483,6 +504,9 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
         const val SETTLING_TIMEOUT_MS = 1200L
         // この間隔内の usage 再取得要求 (ON_RESUME 由来) はスキップする。冷間起動の二重取得対策。
         const val USAGE_REFRESH_MIN_INTERVAL_MS = 2000L
+        // icon 読み込み順を Recent/Count 順で確定するために usage merge 完了を待つ上限。
+        // 超えたらその時点の並びで読み始める (読み込み順だけの問題で、表示順には影響しない)。
+        const val ICON_ORDER_WAIT_TIMEOUT_MS = 500L
         // icon 後追いロードの反映バッチ件数 (再描画を抑える)。
         const val ICON_FLUSH_BATCH = 12
     }
