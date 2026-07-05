@@ -1615,7 +1615,7 @@ private fun DiagnosticsDialog(
                     onRefresh()
                     copied = false
                 }) {
-                    Text("更新")
+                    Text("ログ再読込")
                 }
                 TextButton(onClick = onDismiss) {
                     Text("閉じる")
