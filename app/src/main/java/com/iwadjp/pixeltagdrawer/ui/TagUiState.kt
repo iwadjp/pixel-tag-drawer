@@ -29,6 +29,12 @@ data class TagUiState(
     val editingTagName: String = "",
     // 編集中の横スクロールチップ用表示名の入力値 (空欄なら name 表示)
     val editingTagDisplayLabel: String = "",
+    // 「タグなし」チップの表示名 (prefs 由来・DBには入れない)。null なら既定の「タグなし」。
+    val untaggedDisplayLabel: String? = null,
+    // 「タグなし」表示名を編集中か
+    val editingUntagged: Boolean = false,
+    // 編集中の「タグなし」表示名の入力値
+    val editingUntaggedLabel: String = "",
     // タグ付与/解除の Undo/Redo 可否 (メモリ上の履歴に基づく)
     val canUndo: Boolean = false,
     val canRedo: Boolean = false,

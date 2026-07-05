@@ -581,6 +581,10 @@ fun AppListScreen(
                         "ホーム画面への追加に失敗しました"
                     }
                 },
+                onStartEditUntagged = tagViewModel::startEditUntaggedLabel,
+                onEditingUntaggedLabelChange = tagViewModel::updateEditingUntaggedLabel,
+                onConfirmUntaggedLabel = tagViewModel::confirmUntaggedLabel,
+                onCancelEditUntaggedLabel = tagViewModel::cancelEditUntaggedLabel,
             )
         }
 
@@ -1060,6 +1064,10 @@ private fun TagSection(
     onCancelRename: () -> Unit,
     onPinTag: (com.iwadjp.pixeltagdrawer.data.db.TagEntity) -> Unit,
     onPinUntagged: () -> Unit,
+    onStartEditUntagged: () -> Unit,
+    onEditingUntaggedLabelChange: (String) -> Unit,
+    onConfirmUntaggedLabel: () -> Unit,
+    onCancelEditUntaggedLabel: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -1115,6 +1123,56 @@ private fun TagSection(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
+        // 「タグなし」特別行 (DBのタグではない・チップ先頭固定)。表示名の編集だけできる。
+        // 削除・正式名変更・ホーム・▲▼ は付けない (並び替え対象外)。
+        if (state.editingUntagged) {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                OutlinedTextField(
+                    value = state.editingUntaggedLabel,
+                    onValueChange = onEditingUntaggedLabelChange,
+                    singleLine = true,
+                    label = { Text("表示名 (空欄なら「タグなし」)") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                ) {
+                    TextButton(onClick = onConfirmUntaggedLabel) {
+                        Text("保存")
+                    }
+                    TextButton(onClick = onCancelEditUntaggedLabel) {
+                        Text("キャンセル")
+                    }
+                }
+            }
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "タグなし (先頭固定)",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    state.untaggedDisplayLabel?.takeIf { it.isNotBlank() }?.let { label ->
+                        Text(
+                            text = "表示: $label",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                TextButton(onClick = onStartEditUntagged) {
+                    Text("変更")
+                }
+            }
         }
         if (state.tags.isEmpty()) {
             Text(
@@ -1363,11 +1421,12 @@ private fun TagFilterSection(
                 text = "タグ:",
                 style = MaterialTheme.typography.labelMedium,
             )
-            // 先頭に「タグなし」(未付与アプリのみ)。通常タグとは排他
+            // 先頭に「タグなし」(未付与アプリのみ)。通常タグとは排他。
+            // 表示名 (prefs) があればそれを表示し、未設定/空白なら既定の「タグなし」
             FilterChip(
                 selected = state.showUntaggedOnly,
                 onClick = onToggleUntagged,
-                label = { Text("タグなし") },
+                label = { Text(state.untaggedDisplayLabel?.takeIf { it.isNotBlank() } ?: "タグなし") },
             )
             state.tags.forEach { tag ->
                 FilterChip(

@@ -60,6 +60,18 @@ class AppPreferences(context: Context) {
     }
 
     /**
+     * 「タグなし」チップの表示名。DB には入れず preferences のみで持つ。
+     * null / 空白 / 未設定は「未設定」を意味し、チップは既定の「タグなし」を表示する。
+     * set 時は trim し、blank なら null (未設定) に正規化する。
+     */
+    var untaggedDisplayLabel: String?
+        get() = prefs.getString(KEY_UNTAGGED_DISPLAY_LABEL, null)?.takeIf { it.isNotBlank() }
+        set(value) {
+            val normalized = value?.trim()?.ifEmpty { null }
+            prefs.edit().putString(KEY_UNTAGGED_DISPLAY_LABEL, normalized).apply()
+        }
+
+    /**
      * アプリ一覧の並び順 (name / recent / count)。未保存/不正値は name。
      * 値は AppSortMode.prefValue と対応する。
      */
@@ -77,6 +89,7 @@ class AppPreferences(context: Context) {
         const val KEY_MULTI_SELECT_FILTER = "multi_select_filter"
         const val KEY_FILTER_TAG_IDS = "selected_filter_tag_ids"
         const val KEY_APP_SORT_MODE = "app_sort_mode"
+        const val KEY_UNTAGGED_DISPLAY_LABEL = "untagged_display_label"
         const val DISPLAY_LIST = "list"
         const val DISPLAY_GRID = "grid"
         const val SORT_NAME = "name"

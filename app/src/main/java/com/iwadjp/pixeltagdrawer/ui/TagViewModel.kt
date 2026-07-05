@@ -43,6 +43,7 @@ class TagViewModel(application: Application) : AndroidViewModel(application) {
             selectedFilterTagIds = ids,
             showUntaggedOnly = prefs.showUntaggedOnly,
             multiSelectFilter = multi,
+            untaggedDisplayLabel = prefs.untaggedDisplayLabel,
         )
     }
 
@@ -362,13 +363,55 @@ class TagViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** タグの編集 (名前・表示名) を開始する。既存値を入力欄に入れる。 */
+    /** タグの編集 (名前・表示名) を開始する。既存値を入力欄に入れる。「タグなし」編集は閉じる。 */
     fun startRenameTag(tag: TagEntity) {
         _uiState.update {
             it.copy(
                 editingTag = tag,
                 editingTagName = tag.name,
                 editingTagDisplayLabel = tag.displayLabel.orEmpty(),
+                editingUntagged = false,
+                editingUntaggedLabel = "",
+                message = null,
+            )
+        }
+    }
+
+    /** 「タグなし」の表示名編集を開始する。既存値を入力欄に入れる。通常タグの編集は閉じる。 */
+    fun startEditUntaggedLabel() {
+        _uiState.update {
+            it.copy(
+                editingUntagged = true,
+                editingUntaggedLabel = it.untaggedDisplayLabel.orEmpty(),
+                editingTag = null,
+                editingTagName = "",
+                editingTagDisplayLabel = "",
+                message = null,
+            )
+        }
+    }
+
+    /** 編集中の「タグなし」表示名の入力値を更新する。 */
+    fun updateEditingUntaggedLabel(label: String) {
+        _uiState.update { it.copy(editingUntaggedLabel = label) }
+    }
+
+    /** 「タグなし」表示名の編集をキャンセルする。 */
+    fun cancelEditUntaggedLabel() {
+        _uiState.update { it.copy(editingUntagged = false, editingUntaggedLabel = "", message = null) }
+    }
+
+    /**
+     * 「タグなし」表示名を確定する。保存先は prefs (DBには入れない)。
+     * trim・「blank なら null (=既定の「タグなし」表示)」の正規化は AppPreferences 側が担保する。
+     */
+    fun confirmUntaggedLabel() {
+        prefs.untaggedDisplayLabel = _uiState.value.editingUntaggedLabel
+        _uiState.update {
+            it.copy(
+                untaggedDisplayLabel = prefs.untaggedDisplayLabel,
+                editingUntagged = false,
+                editingUntaggedLabel = "",
                 message = null,
             )
         }
