@@ -5,6 +5,7 @@ import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -40,4 +41,11 @@ interface TagDao {
     /** 指定タグの sortOrder を更新する (▲▼ 並び替え用)。 */
     @Query("UPDATE tags SET sortOrder = :sortOrder WHERE tagId = :tagId")
     suspend fun updateSortOrder(tagId: Long, sortOrder: Int): Int
+
+    /** 隣接2タグの sortOrder を交換する (▲▼ 並び替え用)。途中失敗で片側だけ変わらないよう transaction にする。 */
+    @Transaction
+    suspend fun swapSortOrder(tagIdA: Long, sortOrderA: Int, tagIdB: Long, sortOrderB: Int) {
+        updateSortOrder(tagIdA, sortOrderB)
+        updateSortOrder(tagIdB, sortOrderA)
+    }
 }

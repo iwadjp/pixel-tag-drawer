@@ -406,6 +406,31 @@ class TagViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** タグを表示順で1つ上へ移動する (先頭なら何もしない)。 */
+    fun moveTagUp(tag: TagEntity) = moveTag(tag, -1)
+
+    /** タグを表示順で1つ下へ移動する (末尾なら何もしない)。 */
+    fun moveTagDown(tag: TagEntity) = moveTag(tag, +1)
+
+    /**
+     * 表示順 (uiState.tags の並び) で隣のタグと sortOrder を交換する。
+     * 更新後の並びは observeTags 経由でUIへ自然反映される。
+     */
+    private fun moveTag(tag: TagEntity, delta: Int) {
+        val tags = _uiState.value.tags
+        val index = tags.indexOfFirst { it.tagId == tag.tagId }
+        if (index < 0) return
+        val neighbor = tags.getOrNull(index + delta) ?: return
+        viewModelScope.launch {
+            try {
+                repository.swapSortOrder(tags[index], neighbor)
+            } catch (e: Exception) {
+                Log.w(TAG, "タグの並び替えに失敗しました", e)
+                _uiState.update { it.copy(message = "並び替えに失敗しました") }
+            }
+        }
+    }
+
     /** タグを削除する (UIは任意)。 */
     fun deleteTag(tag: TagEntity) {
         viewModelScope.launch {

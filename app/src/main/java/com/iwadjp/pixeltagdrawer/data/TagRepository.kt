@@ -58,6 +58,10 @@ class TagRepository(context: Context) {
     suspend fun updateSortOrder(tagId: Long, sortOrder: Int): Int =
         tagDao.updateSortOrder(tagId, sortOrder)
 
+    /** 隣接2タグの sortOrder を交換する (▲▼ 並び替え用)。 */
+    suspend fun swapSortOrder(a: TagEntity, b: TagEntity) =
+        tagDao.swapSortOrder(a.tagId, a.sortOrder, b.tagId, b.sortOrder)
+
     /** アプリ (packageName + className) にタグを付与する。重複は IGNORE。 */
     suspend fun assignTag(packageName: String, className: String, tagId: Long) =
         appTagDao.insert(AppTagCrossRef(packageName, className, tagId))

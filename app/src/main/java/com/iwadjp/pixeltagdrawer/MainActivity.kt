@@ -559,6 +559,8 @@ fun AppListScreen(
                 onCreate = tagViewModel::createTag,
                 onDelete = tagViewModel::deleteTag,
                 onStartRename = tagViewModel::startRenameTag,
+                onMoveUp = tagViewModel::moveTagUp,
+                onMoveDown = tagViewModel::moveTagDown,
                 onEditingNameChange = tagViewModel::updateEditingTagName,
                 onConfirmRename = tagViewModel::confirmRenameTag,
                 onCancelRename = tagViewModel::cancelRenameTag,
@@ -1049,6 +1051,8 @@ private fun TagSection(
     onCreate: () -> Unit,
     onDelete: (com.iwadjp.pixeltagdrawer.data.db.TagEntity) -> Unit,
     onStartRename: (com.iwadjp.pixeltagdrawer.data.db.TagEntity) -> Unit,
+    onMoveUp: (com.iwadjp.pixeltagdrawer.data.db.TagEntity) -> Unit,
+    onMoveDown: (com.iwadjp.pixeltagdrawer.data.db.TagEntity) -> Unit,
     onEditingNameChange: (String) -> Unit,
     onConfirmRename: () -> Unit,
     onCancelRename: () -> Unit,
@@ -1125,7 +1129,7 @@ private fun TagSection(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-            state.tags.forEach { tag ->
+            state.tags.forEachIndexed { index, tag ->
                 if (state.editingTag?.tagId == tag.tagId) {
                     // 編集中: 名前入力欄 + 保存 / キャンセル
                     Row(
@@ -1158,6 +1162,25 @@ private fun TagSection(
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.weight(1f),
                         )
+                        // ▲▼ で表示順を1つずつ移動する。先頭の▲・末尾の▼は無効。
+                        IconButton(
+                            onClick = { onMoveUp(tag) },
+                            enabled = index > 0,
+                            modifier = Modifier
+                                .size(32.dp)
+                                .semantics { contentDescription = "上へ移動" },
+                        ) {
+                            Text("▲", style = MaterialTheme.typography.labelLarge)
+                        }
+                        IconButton(
+                            onClick = { onMoveDown(tag) },
+                            enabled = index < state.tags.lastIndex,
+                            modifier = Modifier
+                                .size(32.dp)
+                                .semantics { contentDescription = "下へ移動" },
+                        ) {
+                            Text("▼", style = MaterialTheme.typography.labelLarge)
+                        }
                         // 控えめなテキストボタン。誤操作を避けるため小さめに留める
                         TextButton(onClick = { onPinTag(tag) }) {
                             Text("ホーム")
