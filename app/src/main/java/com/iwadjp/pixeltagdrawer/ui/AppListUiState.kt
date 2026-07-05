@@ -15,6 +15,10 @@ data class AppListUiState(
     val errorMessage: String? = null,
     val sortMode: AppSortMode = AppSortMode.Name,
     val usageStatsAccessGranted: Boolean = false,
+    // Recent/Count 起動時の「並び確定待ち」。true の間、一覧の初回描画を保留して
+    // usage stats 反映前の実質名前順 (label-only) 表示 → recent/count 順への
+    // 二段階切り替わりを見せない。usage merge 完了・Name への切替・タイムアウトで解除。
+    val initialSortSettling: Boolean = false,
 ) {
     /** app label または packageName に query を含むアプリ (大文字小文字を区別しない)。 */
     val filteredApps: List<LauncherApp>

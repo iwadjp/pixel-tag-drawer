@@ -877,6 +877,17 @@ fun AppListScreen(
                 )
             }
 
+            // Recent/Count 起動の並び確定待ち: usage stats 反映前の実質名前順を一瞬見せて
+            // 数百ms後に並び替わる二段階表示を避ける。VM 側のタイムアウトで必ず解除される。
+            uiState.initialSortSettling -> {
+                Text(
+                    text = "アプリ一覧を読み込んでいます...",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 16.dp),
+                )
+            }
+
             sortedApps.isEmpty() -> {
                 Text(
                     text = "一致するアプリがありません",
