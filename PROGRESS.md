@@ -1358,3 +1358,89 @@ recent/count sort、未許可時の fallback、設定導線、ソート後の先
 
 - 直前FB (上部行への移動) は取り下げ、タグチップ行右端の一括解除ボタンに復元した。
 - 実機確認は次回。
+
+---
+
+## 2026-07-05 ソート安定化・アイコン読込順・タグナビ配置 accepted (2026-07-07)
+
+### 経緯
+
+上記「タグ解除FB取り下げ・右端解除ボタン復元」以降、同日中に以下の関連コミットが続けて入ったが、
+これまでPROGRESS.mdに記録されていなかった。今回はコード変更を行わず、これらを1つのまとまりとして
+記録し、実機確認の準備をする。
+
+### 対象commit
+
+- `f0b63d4` Reset app list scroll on sort change
+- `af066e7` Avoid resorting app list during icon load
+- `6c51af9` Delay recent sort display until usage stats load
+- `b21b85b` Rename diagnostics refresh button
+- `1ae7267` Skip duplicate usage refresh at startup
+- `9d8f084` Load icons in current sort order
+- `49e3bea` Move tag navigation buttons to left of search box
+
+### 変更内容 (commit別)
+
+- **f0b63d4 Reset app list scroll on sort change**
+  - ソートモード変更時、表示中の List/Grid を先頭へ戻す処理を、表示側 state を先に確定させる順序に調整。
+  - Recent/Count では、並び (`appOrderKey`) が変化した時に加え、初回composeでも先頭へ貼り直す処理を追加
+    (Activity再生成時に`rememberLazyListState`が復元したスクロール位置へ戻ってしまう対策)。
+  - 名前順ではこの貼り直しを行わない。手動スクロール中は割り込まない。
+  - デバッグ用の`PerfLog`出力を追加。
+
+- **af066e7 Avoid resorting app list during icon load**
+  - アイコンの後追い読み込みのたびに`sortedApps`のインスタンスが変わり不要な再ソートが走っていたのを抑制。
+  - ソートに影響する入力 (mode / 対象集合 / label / usage値) の署名が前回と同じ場合は、
+    アイコン差し替え済みの新インスタンスを既存順のまま並べ直すだけにする。
+  - 署名不一致 (対象集合が食い違う等) の場合は安全側で通常の再ソートにフォールバック。
+
+- **6c51af9 Delay recent sort display until usage stats load**
+  - Recent/Count起動時、usage stats反映前の実質名前順を一瞬表示してから並び替わる二段階表示を避けるため、
+    `initialSortSettling`状態を追加。
+  - settling中は「アプリ一覧を読み込んでいます...」を表示し、一覧描画を保留。
+  - usage merge完了 / 名前順へのフォールバック / タイムアウト (`SETTLING_TIMEOUT_MS`) のいずれかで解除。
+
+- **b21b85b Rename diagnostics refresh button**
+  - 診断ダイアログの「更新」ボタンを「ログ再読込」に変更 (押下対象・挙動は変更なし、ラベルのみ)。
+
+- **1ae7267 Skip duplicate usage refresh at startup**
+  - 冷間起動時、`ON_RESUME`由来の`refreshUsageStats()`と本体側の usage merge が二重に走るケースを抑制。
+  - `usageMergeInProgress` (実行中フラグ) と直近merge完了時刻・反映件数を保持し、
+    「先に始まった方を優先」「直近2秒以内かつ反映件数>0なら重複スキップ」のルールでどちらか一方のみ実行。
+  - 実際に一覧が見え始めた最初のタイミングを1回だけ記録する計測ログも追加。
+
+- **9d8f084 Load icons in current sort order**
+  - アイコンの後追い読み込み順を、読み込み開始時点の元リスト順ではなく現在の表示ソート順
+    (Recent/Countはusage反映後の順) に変更。
+  - Recent/Countではusage mergeの完了を`ICON_ORDER_WAIT_TIMEOUT_MS` (500ms) まで待ってから読み込み順を確定。
+  - 名前順は待たずに読み込み開始。読み込み順のみに影響し、UIの並び順・batch flush動作は変えない。
+
+- **49e3bea Move tag navigation buttons to left of search box**
+  - 単一タグ選択中に表示される前/次タグの◀▶ナビゲーションボタンを、検索ボックスの右側から左側へ移動。
+  - 検索ボックス自体の見た目・クリアボタン・レイアウト幅の扱いは変更なし。
+
+### 変更しなかったもの
+
+- DB schema / DB version
+- タグ付与・複数選択モード・検索ロジック本体
+- `QUERY_ALL_PACKAGES` 追加なし、HOMEランチャー宣言なし
+- 直前に復元したタグ絞り込み一括解除ボタン (`TagFilterSection`右端の「解除」) のロジック・配置
+
+### ビルド確認
+
+- `./gradlew compileDebugKotlin` 成功 (SDK XMLバージョンに関する警告のみ、実装への影響なし)
+
+### 実機確認チェックリスト (Pixel 10a / 確認済み)
+
+- [x] タグ絞り込み時、右端の解除ボタンが期待どおり使える
+- [x] タグナビゲーションボタンが検索ボックス左側にあり、操作しやすい
+- [x] ソート変更時にリストが先頭へ戻る
+- [x] recent sort / count sort の表示が UsageStats 読み込み前に誤表示されない
+- [x] アイコン読み込みで並び順が途中で乱れない
+- [x] 起動直後に usage refresh が重複して走っていない
+- [x] 診断/更新ボタンのラベルが意図どおり分かりやすい
+- [x] compileDebugKotlin が成功している (確認済み、上記参照)
+
+### 判断
+
+- accepted (2026-07-07)。Pixel 10a 実機確認チェックリストが全て OK となったため受け入れ済みとする。
