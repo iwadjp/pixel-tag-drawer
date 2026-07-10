@@ -35,18 +35,54 @@ class RecommendedScoreTest {
         assertEquals(0.0, recommendedScore(sessionCount = 0, ageMs = 0L), delta)
     }
 
+    // 飽和回数 64 (RECOMMENDED_FREQUENCY_SATURATION_COUNT) での期待値。
+    // frequency(n) = ln(1+n) / ln(1+64) の概算値、浮動小数点誤差を考慮し delta=1e-3 で比較する。
+    private val freqDelta = 1e-3
+
     @Test
-    fun `frequency reaches 1_0 at count 8`() {
-        assertEquals(1.0, recommendedFrequency(sessionCount = 8), 1e-9)
+    fun `frequency at count 8 is about 0_526, not 1_0`() {
+        assertEquals(0.526, recommendedFrequency(sessionCount = 8), freqDelta)
     }
 
     @Test
-    fun `frequency never exceeds 1_0 beyond count 8`() {
+    fun `frequency at count 10 is about 0_574`() {
+        assertEquals(0.574, recommendedFrequency(sessionCount = 10), freqDelta)
+    }
+
+    @Test
+    fun `frequency at count 20 is about 0_729`() {
+        assertEquals(0.729, recommendedFrequency(sessionCount = 20), freqDelta)
+    }
+
+    @Test
+    fun `frequency at count 37 is about 0_872`() {
+        assertEquals(0.872, recommendedFrequency(sessionCount = 37), freqDelta)
+    }
+
+    @Test
+    fun `frequency at count 48 is about 0_932`() {
+        assertEquals(0.932, recommendedFrequency(sessionCount = 48), freqDelta)
+    }
+
+    @Test
+    fun `frequency reaches 1_0 exactly at count 64`() {
+        assertEquals(1.0, recommendedFrequency(sessionCount = 64), 1e-9)
+    }
+
+    @Test
+    fun `frequency never exceeds 1_0 beyond count 64`() {
         val f100 = recommendedFrequency(sessionCount = 100)
         assertEquals(1.0, f100, 1e-9)
         assertTrue(f100 <= 1.0)
         val f1000 = recommendedFrequency(sessionCount = 1000)
         assertTrue(f1000 <= 1.0)
+    }
+
+    @Test
+    fun `frequency at count 8 and count 48 differ clearly`() {
+        val f8 = recommendedFrequency(sessionCount = 8)
+        val f48 = recommendedFrequency(sessionCount = 48)
+        assertTrue("f8=$f8 f48=$f48 should differ by more than 0.1", f48 - f8 > 0.1)
     }
 
     @Test
@@ -84,8 +120,8 @@ class RecommendedScoreTest {
 
     @Test
     fun `recently repeated app outranks an old habitual app`() {
-        // 古い常用アプリ: 8セッション(頻度飽和)だが最終利用が5日前 (recencyがかなり減衰)
-        val oldHabitual = recommendedScore(sessionCount = 8, ageMs = 5 * day)
+        // 古い常用アプリ: 64セッション(頻度飽和)だが最終利用が5日前 (recencyがかなり減衰)
+        val oldHabitual = recommendedScore(sessionCount = 64, ageMs = 5 * day)
         // 最近反復利用されたアプリ: 2セッションのみだがたった今使った
         val recentRepeat = recommendedScore(sessionCount = 2, ageMs = 0L)
         assertTrue(

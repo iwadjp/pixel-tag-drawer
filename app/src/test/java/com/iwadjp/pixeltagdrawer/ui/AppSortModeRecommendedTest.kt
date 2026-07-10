@@ -1,5 +1,6 @@
 package com.iwadjp.pixeltagdrawer.ui
 
+import com.iwadjp.pixeltagdrawer.BuildConfig
 import com.iwadjp.pixeltagdrawer.model.LauncherApp
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -118,5 +119,77 @@ class AppSortModeRecommendedTest {
         )
         assertEquals(scoreAlone, scoreInPresenceOfPeer, 0.0)
         assertTrue(scoreAlone > 0.0)
+    }
+
+    // --- 自己パッケージ除外 (Recommended専用) ---
+
+    @Test
+    fun `self package is placed behind other apps with real history even with the highest raw session count`() {
+        val selfPkg = "com.example.self"
+        val selfApp = app("SelfApp", selfPkg, sessionCount = 999, lastSessionAt = now)
+        val otherWithHistory = app("Other", "com.example.other", sessionCount = 1, lastSessionAt = now - 10 * hour)
+        val noHistory = app("NoHistory", "com.example.none")
+
+        val sorted = sortApps(
+            listOf(selfApp, otherWithHistory, noHistory),
+            AppSortMode.Recommended,
+            now,
+            selfPackageName = selfPkg,
+        )
+
+        assertEquals(otherWithHistory.packageName, sorted.first().packageName)
+        val selfIndex = sorted.indexOfFirst { it.packageName == selfPkg }
+        val otherIndex = sorted.indexOfFirst { it.packageName == otherWithHistory.packageName }
+        assertTrue("self ($selfIndex) should rank behind other-with-history ($otherIndex)", selfIndex > otherIndex)
+    }
+
+    @Test
+    fun `self package retains its real session data even though it is excluded from ranking`() {
+        // モデル上は recommendedSessionCount/recommendedLastSessionAt を保持したままでよい。
+        // 除外されるのはランキング (score比較) だけ。
+        val selfPkg = "com.example.self"
+        val selfApp = app("SelfApp", selfPkg, sessionCount = 999, lastSessionAt = now)
+        val sorted = sortApps(listOf(selfApp), AppSortMode.Recommended, now, selfPackageName = selfPkg)
+        val result = sorted.first()
+        assertEquals(999, result.recommendedSessionCount)
+        assertEquals(now, result.recommendedLastSessionAt)
+    }
+
+    @Test
+    fun `default selfPackageName matches this app's real applicationId via BuildConfig`() {
+        // selfPackageName を明示せず既定値 (BuildConfig.APPLICATION_ID) に任せた場合の動作確認。
+        val selfApp = app("PixelTagDrawer", BuildConfig.APPLICATION_ID, sessionCount = 999, lastSessionAt = now)
+        val otherWithHistory = app("Other", "com.example.other", sessionCount = 1, lastSessionAt = now - 10 * hour)
+        val sorted = sortApps(listOf(selfApp, otherWithHistory), AppSortMode.Recommended, now)
+        assertEquals(otherWithHistory.packageName, sorted.first().packageName)
+        assertEquals(selfApp.packageName, sorted.last().packageName)
+    }
+
+    @Test
+    fun `Name, Recent and Count sorts are unaffected by self-package exclusion`() {
+        val selfPkg = "com.example.self"
+        val selfApp = LauncherApp(
+            label = "SelfApp",
+            packageName = selfPkg,
+            className = "MainActivity",
+            usageLaunchCount = 100,
+            usageLastUsedAt = now,
+        )
+        val other = LauncherApp(
+            label = "Other",
+            packageName = "com.example.other",
+            className = "MainActivity",
+            usageLaunchCount = 1,
+            usageLastUsedAt = now - 10 * hour,
+        )
+
+        val byName = sortApps(listOf(other, selfApp), AppSortMode.Name, now, selfPackageName = selfPkg)
+        assertEquals(listOf("Other", "SelfApp"), byName.map { it.label })
+
+        val byRecent = sortApps(listOf(other, selfApp), AppSortMode.Recent, now, selfPackageName = selfPkg)
+        assertEquals(selfApp.packageName, byRecent.first().packageName)
+
+        val byCount = sortApps(listOf(other, selfApp), AppSortMode.Count, now, selfPackageName = selfPkg)
+        assertEquals(selfApp.packageName, byCount.first().packageName)
     }
 }

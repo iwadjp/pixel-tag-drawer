@@ -12,8 +12,8 @@ import kotlin.math.pow
 /** 直近性の半減期 (24時間)。 */
 const val RECOMMENDED_RECENCY_HALF_LIFE_MS = 24L * 60L * 60L * 1000L
 
-/** 頻度が飽和するセッション数の目安 (8セッションでfrequency=1.0)。 */
-const val RECOMMENDED_FREQUENCY_SATURATION_COUNT = 8
+/** 頻度が飽和するセッション数の目安 (64セッションでfrequency=1.0)。 */
+const val RECOMMENDED_FREQUENCY_SATURATION_COUNT = 64
 
 const val RECOMMENDED_RECENCY_WEIGHT = 0.65
 const val RECOMMENDED_FREQUENCY_WEIGHT = 0.35
@@ -29,7 +29,7 @@ fun recommendedRecency(sessionCount: Int, ageMs: Long): Double {
 }
 
 /**
- * 頻度。frequency(a) = ln(1 + count) / ln(1 + 8)、最大1.0にclamp。
+ * 頻度。frequency(a) = ln(1 + count) / ln(1 + 64)、最大1.0にclamp。
  * 表示対象集合の最大値等では正規化しない (同じアプリのスコアは集合が変わっても変化しない)。
  */
 fun recommendedFrequency(sessionCount: Int): Double {

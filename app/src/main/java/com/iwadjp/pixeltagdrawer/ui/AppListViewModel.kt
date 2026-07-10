@@ -294,14 +294,15 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
      * 「おすすめ」上位10件を診断ログへ出す (実機評価用)。既存の PerfLog リングバッファへ積むだけで、
      * 専用UIは追加しない (診断ダイアログの既存 report() でそのまま確認できる)。
      * ソートモードが Recommended の時の merge 完了時のみ呼ぶため、通常運用でのログ増加は限定的。
+     *
+     * 実際の一覧表示と同じ sortApps() (自己パッケージ除外込み) でランキングするため、
+     * このログでも Pixel Tag Drawer 自身は他の履歴ありアプリの後方に回る。
      */
     private fun logTopRecommended(apps: List<LauncherApp>) {
         val now = System.currentTimeMillis()
-        val ranked = apps
-            .filter { it.recommendedSessionCount > 0 }
-            .sortedByDescending { recommendedScore(it.recommendedSessionCount, now - it.recommendedLastSessionAt) }
-            .take(10)
-        PerfLog.log("[RECO] top${ranked.size} (of nonZero=${apps.count { it.recommendedSessionCount > 0 }})")
+        val withHistory = apps.filter { it.recommendedSessionCount > 0 }
+        val ranked = sortApps(withHistory, AppSortMode.Recommended, now).take(10)
+        PerfLog.log("[RECO] top${ranked.size} (of nonZero=${withHistory.size})")
         ranked.forEachIndexed { index, app ->
             val age = now - app.recommendedLastSessionAt
             val recency = recommendedRecency(app.recommendedSessionCount, age)

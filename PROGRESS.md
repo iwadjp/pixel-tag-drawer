@@ -1569,3 +1569,40 @@ AppSortModeRecommendedTest:   7 tests, 0 failed
   常に取得する設計とした (どのソートモードでもモード切替が即座に効く既存体験を維持するため)。
   そのぶんmerge処理あたりのUsageStatsManager呼び出しが1回増える。実機での初期表示速度への
   影響は未計測。
+
+---
+
+## 2026-07-11 「おすすめ」ソート 初回実機診断ログと調整 — 未受容・実機確認待ち
+
+### 初回実機評価の結果 (調整前)
+
+- 起動性能: `onCreate→firstList` 1307ms で問題なし (前回計測のベースラインと同水準)。
+- **Calendarは上位10件に現れず、誤検出は改善傾向**だった (継続時間フィルタ・セッション統合の
+  意図どおりの効果と見られる)。
+- 一方で2つの問題を確認した。
+  1. **自己パッケージ (Pixel Tag Drawer自身) が必然的に上位 (1位) になる**。Drawerを開くたびに
+     直近利用として自己観測されるため、「次に起動したいアプリ」の予測信号にならない。
+  2. **飽和回数8では上位アプリのfrequencyが軒並み1.0**になり、頻度項が上位内の順位差を
+     作れていなかった (実機ログ例: Pixel Tag Drawer sessions=138, Play ストア sessions=48,
+     Chrome sessions=151, Musicolet sessions=78, WolLight sessions=37, Link sessions=10,
+     マップ sessions=8, Feedly sessions=20, Gmail sessions=79, Google sessions=70 が
+     いずれも frequency=1.0)。上位が実質的に最近順に潰れていた。
+
+### 対応した修正 (今回)
+
+- **自己パッケージ除外**: 「おすすめ」ソートのみ、Pixel Tag Drawer自身
+  (`BuildConfig.APPLICATION_ID`、ハードコード文字列ではない) を履歴なし相当としてランキング後方へ
+  配置するよう `sortApps()` を修正した (`ui/AppSortMode.kt`)。アプリ一覧そのものからは削除せず、
+  モデル上の `recommendedSessionCount`/`recommendedLastSessionAt` も保持したまま。
+  名前順・最近順・回数順・診断ログの上位10件抽出も同じ `sortApps()` を経由するため、
+  自己パッケージ除外判定はこの1箇所にのみ実装している。
+- **頻度飽和回数を8→64へ変更**: `RECOMMENDED_FREQUENCY_SATURATION_COUNT` のみ変更し、
+  score式・各重み・半減期・OBSERVATION_DAYS・MIN_SESSION_MS・MERGE_GAP_MS・セッション生成方法は
+  変更していない。
+
+### 修正後の位置づけ
+
+自己パッケージ除外と64回飽和への修正は反映したが、**実機での再評価はまだ行っていない**。
+Pixel Tag Drawer自身がtop10から外れること、上位アプリのfrequencyに差が出ること
+(diagnostics `[RECO]` ログで確認可能) を次回のPixel 10a dogfoodingで確認するまで、
+本節も含めて accepted とはしない。

@@ -18,6 +18,9 @@ android {
 
     buildFeatures {
         compose = true
+        // 「おすすめ」ソートで自己パッケージ(Pixel Tag Drawer自身)を除外する判定に
+        // BuildConfig.APPLICATION_ID を使うため有効化する。
+        buildConfig = true
     }
 }
 
