@@ -933,6 +933,8 @@ fun AppListScreen(
                         style = MaterialTheme.typography.labelMedium,
                     )
                     Spacer(modifier = Modifier.width(12.dp))
+                    // リスト/アイコン切替とソート選択。ソート選択部分だけ weight(1f) で残り幅を
+                    // 使い、右端の編集用「…」(この Row の外側) を画面外へ押し出さないようにする。
                     Row(
                         modifier = Modifier.weight(1f),
                         verticalAlignment = Alignment.CenterVertically,
@@ -954,9 +956,13 @@ fun AppListScreen(
                             AppSortMode.Count -> "回数"
                             AppSortMode.Recommended -> "おすすめ"
                         }
-                        Box {
+                        Box(modifier = Modifier.weight(1f)) {
                             TextButton(onClick = { sortMenuExpanded = true }) {
-                                Text("$sortLabel ▼")
+                                Text(
+                                    text = "$sortLabel ▼",
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
                             }
                             // 通常モード (None) の変更だけ永続化する。
                             // 絞り込み起動中 (Simplified/Editing) の変更は一時的で、保存ソートを汚さない。
@@ -1009,70 +1015,72 @@ fun AppListScreen(
                                 )
                             }
                         }
-                        if (!simplified) {
-                            Box {
-                                IconButton(
-                                    onClick = { appListMenuExpanded = true },
-                                    modifier = Modifier
-                                        .size(36.dp)
-                                        .semantics { contentDescription = "その他" },
-                                ) {
-                                    TopActionOverflowDots()
+                    }
+                    // 右端の編集用「…」。固定サイズのまま Row 直下の最後の要素として配置し、
+                    // 上の重み付き Row がどれだけ縮んでも画面外へ押し出されないようにする。
+                    if (!simplified) {
+                        Box {
+                            IconButton(
+                                onClick = { appListMenuExpanded = true },
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .semantics { contentDescription = "その他" },
+                            ) {
+                                TopActionOverflowDots()
+                            }
+                            DropdownMenu(
+                                expanded = appListMenuExpanded,
+                                onDismissRequest = { appListMenuExpanded = false },
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text(if (tagEditMode) "タグ編集を終了" else "タグ編集") },
+                                    onClick = {
+                                        appListMenuExpanded = false
+                                        tagEditMode = !tagEditMode
+                                        if (!tagEditMode) {
+                                            tagViewModel.clearSelectedApp()
+                                            selectedBulkApps = emptySet()
+                                            bulkTargetTagId = null
+                                        }
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(if (tagState.multiSelectFilter) "複数選択をオフ" else "複数選択")
+                                    },
+                                    onClick = {
+                                        appListMenuExpanded = false
+                                        tagViewModel.toggleMultiSelectFilter()
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(if (showTagManagement) "タグ管理を閉じる" else "タグ管理") },
+                                    onClick = {
+                                        appListMenuExpanded = false
+                                        showTagManagement = !showTagManagement
+                                    },
+                                )
+                                if (!uiState.usageStatsAccessGranted) {
+                                    DropdownMenuItem(
+                                        text = { Text("使用状況アクセス設定") },
+                                        onClick = {
+                                            appListMenuExpanded = false
+                                            PerfLog.log("[USAGE] usage access settings opened")
+                                            context.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
+                                        },
+                                    )
                                 }
-                                DropdownMenu(
-                                    expanded = appListMenuExpanded,
-                                    onDismissRequest = { appListMenuExpanded = false },
-                                ) {
-                                    DropdownMenuItem(
-                                        text = { Text(if (tagEditMode) "タグ編集を終了" else "タグ編集") },
-                                        onClick = {
-                                            appListMenuExpanded = false
-                                            tagEditMode = !tagEditMode
-                                            if (!tagEditMode) {
-                                                tagViewModel.clearSelectedApp()
-                                                selectedBulkApps = emptySet()
-                                                bulkTargetTagId = null
-                                            }
-                                        },
-                                    )
-                                    DropdownMenuItem(
-                                        text = {
-                                            Text(if (tagState.multiSelectFilter) "複数選択をオフ" else "複数選択")
-                                        },
-                                        onClick = {
-                                            appListMenuExpanded = false
-                                            tagViewModel.toggleMultiSelectFilter()
-                                        },
-                                    )
-                                    DropdownMenuItem(
-                                        text = { Text(if (showTagManagement) "タグ管理を閉じる" else "タグ管理") },
-                                        onClick = {
-                                            appListMenuExpanded = false
-                                            showTagManagement = !showTagManagement
-                                        },
-                                    )
-                                    if (!uiState.usageStatsAccessGranted) {
-                                        DropdownMenuItem(
-                                            text = { Text("使用状況アクセス設定") },
-                                            onClick = {
-                                                appListMenuExpanded = false
-                                                PerfLog.log("[USAGE] usage access settings opened")
-                                                context.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
-                                            },
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            text = "最近起動・起動回数・おすすめは端末の使用履歴に基づきます。同じパッケージの複数アプリは同じ統計を共有します",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
-                                    }
-                                    DropdownMenuItem(
-                                        text = {
-                                            Text(
-                                                text = "最近起動・起動回数・おすすめは端末の使用履歴に基づきます。同じパッケージの複数アプリは同じ統計を共有します",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            )
-                                        },
-                                        enabled = false,
-                                        onClick = {},
-                                    )
-                                }
+                                    },
+                                    enabled = false,
+                                    onClick = {},
+                                )
                             }
                         }
                     }
