@@ -723,7 +723,8 @@ fun AppListScreen(
         }
         val usageStatsKey = remember(searchFilteredApps) {
             searchFilteredApps.joinToString(separator = "|") { app ->
-                "${app.packageName}/${app.className}:${app.usageLaunchCount}:${app.usageLastUsedAt}"
+                "${app.packageName}/${app.className}:${app.usageLaunchCount}:${app.usageLastUsedAt}:" +
+                    "${app.recommendedSessionCount}:${app.recommendedLastSessionAt}"
             }
         }
         // icon 後追いロード中の不要な再ソート抑制。icon batch のたびに apps のインスタンスが
@@ -757,9 +758,11 @@ fun AppListScreen(
                 }
             }
             // 並びに影響する入力だけの署名 (icon は含めない)。Name は label、
-            // Recent/Count は usage 値がソートキーのため、その全てと対象集合を含める。
+            // Recent/Count は usage 値、Recommended はセッション集計値がソートキーのため、
+            // その全てと対象集合を含める。
             val signature = effectiveSortMode.prefValue + "|" + tagFiltered.joinToString("|") {
-                "${it.packageName}/${it.className}:${it.label}:${it.usageLaunchCount}:${it.usageLastUsedAt}"
+                "${it.packageName}/${it.className}:${it.label}:${it.usageLaunchCount}:${it.usageLastUsedAt}:" +
+                    "${it.recommendedSessionCount}:${it.recommendedLastSessionAt}"
             }
             val cachedOrder = sortOrderCache.order
             val result = if (signature == sortOrderCache.signature && cachedOrder != null) {
@@ -949,6 +952,7 @@ fun AppListScreen(
                             AppSortMode.Name -> "名前順"
                             AppSortMode.Recent -> "最近"
                             AppSortMode.Count -> "回数"
+                            AppSortMode.Recommended -> "おすすめ"
                         }
                         Box {
                             TextButton(onClick = { sortMenuExpanded = true }) {
@@ -985,9 +989,17 @@ fun AppListScreen(
                                     },
                                 )
                                 DropdownMenuItem(
+                                    text = { Text("おすすめ") },
+                                    enabled = uiState.usageStatsAccessGranted,
+                                    onClick = {
+                                        sortMenuExpanded = false
+                                        viewModel.setSortMode(AppSortMode.Recommended, persist = persistSort)
+                                    },
+                                )
+                                DropdownMenuItem(
                                     text = {
                                         Text(
-                                            text = "最近起動・起動回数は端末の使用履歴に基づきます。同じパッケージの複数アプリは同じ統計を共有します",
+                                            text = "最近起動・起動回数・おすすめは端末の使用履歴に基づきます。同じパッケージの複数アプリは同じ統計を共有します",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
@@ -1052,7 +1064,7 @@ fun AppListScreen(
                                     DropdownMenuItem(
                                         text = {
                                             Text(
-                                                text = "最近起動・起動回数は端末の使用履歴に基づきます。同じパッケージの複数アプリは同じ統計を共有します",
+                                                text = "最近起動・起動回数・おすすめは端末の使用履歴に基づきます。同じパッケージの複数アプリは同じ統計を共有します",
                                                 style = MaterialTheme.typography.bodySmall,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                             )

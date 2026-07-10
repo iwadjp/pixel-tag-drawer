@@ -79,6 +79,54 @@ class AppRepository(private val context: Context) {
     }
 
     /**
+     * 「おすすめ」ソート用に、UsageEventsから直近 [days] 日 (既定7日) の利用セッションを生成し、
+     * packageName単位に集計する。最近順・回数順が使う loadUsageStats() (30日) とは独立しており、
+     * そちらの挙動には影響しない。
+     *
+     * queryEvents が実際に返した範囲のイベントだけを使う (7日分が必ず保持されている前提は置かない)。
+     */
+    fun loadRecommendedUsage(days: Int = RECOMMENDED_OBSERVATION_DAYS): Map<String, RecommendedUsageStats> {
+        val usageStatsManager = context.getSystemService(UsageStatsManager::class.java) ?: return emptyMap()
+        val end = System.currentTimeMillis()
+        val start = end - days * 24L * 60L * 60L * 1000L
+        // ACTIVITY_STOPPED はAPI29+でのみ発生しうる追加の終了シグナル。旧OSでは実際に発生しないため
+        // 無条件で含めても害はないが、意図を明示するため API レベルで切り替える。
+        val includeActivityStopped = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+
+        val rawEvents = mutableListOf<RawSessionEvent>()
+        val events = usageStatsManager.queryEvents(start, end)
+        val event = UsageEvents.Event()
+        while (events.hasNextEvent()) {
+            events.getNextEvent(event)
+            val packageName = event.packageName
+            val className = event.className
+            if (packageName.isNullOrBlank() || className.isNullOrBlank()) continue
+            val kind = classifySessionEventType(event.eventType, includeActivityStopped) ?: continue
+            rawEvents.add(RawSessionEvent(packageName, className, event.timeStamp, kind))
+            if (DEBUG_TRACE_PACKAGE != null && packageName == DEBUG_TRACE_PACKAGE) {
+                PerfLog.log("[RECO][trace] pkg=$packageName cls=$className kind=$kind at=${event.timeStamp}")
+            }
+        }
+
+        val sessions = buildAcceptedSessions(
+            events = rawEvents,
+            windowEndMs = end,
+            mergeGapMs = RECOMMENDED_MERGE_GAP_MS,
+            minSessionMs = RECOMMENDED_MIN_SESSION_MS,
+        )
+
+        val result = mutableMapOf<String, RecommendedUsageStats>()
+        sessions.forEach { session ->
+            val current = result[session.packageName] ?: RecommendedUsageStats()
+            result[session.packageName] = current.copy(
+                sessionCount = current.sessionCount + 1,
+                lastSessionStartAt = maxOf(current.lastSessionStartAt, session.startMs),
+            )
+        }
+        return result
+    }
+
+    /**
      * Intent.ACTION_MAIN + CATEGORY_LAUNCHER で解決できる起動可能Activityを列挙する。
      * QUERY_ALL_PACKAGES は使わない。
      */
@@ -196,12 +244,27 @@ class AppRepository(private val context: Context) {
         // intrinsicサイズが取れないDrawable用のフォールバック解像度(px)。
         const val ICON_FALLBACK_PX = 96
         const val USAGE_STATS_DAYS = 30
+
+        // 「おすすめ」ソート用の定数群 (最近順・回数順の USAGE_STATS_DAYS=30 とは別)。
+        const val RECOMMENDED_OBSERVATION_DAYS = 7
+        const val RECOMMENDED_MIN_SESSION_MS = 2_000L
+        const val RECOMMENDED_MERGE_GAP_MS = 30_000L
+
+        // 誤検出調査用: 指定packageのセッション化前イベント列だけをPerfLogへ出す (既定は無効)。
+        // 例: Calendarの誤検出を追うときだけ一時的にpackageNameを入れてビルドする。
+        val DEBUG_TRACE_PACKAGE: String? = null
     }
 }
 
 data class AppUsageStats(
     val launchCount: Int = 0,
     val lastUsedAt: Long = 0,
+)
+
+/** 「おすすめ」ソート用の集計 (採用済みセッション数と最終セッション開始時刻)。 */
+data class RecommendedUsageStats(
+    val sessionCount: Int = 0,
+    val lastSessionStartAt: Long = 0,
 )
 
 @Suppress("DEPRECATION")

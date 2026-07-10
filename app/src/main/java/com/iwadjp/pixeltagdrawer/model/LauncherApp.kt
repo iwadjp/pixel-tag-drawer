@@ -19,4 +19,8 @@ data class LauncherApp(
     val lastLaunchedAt: Long = 0,
     val usageLaunchCount: Int = 0,
     val usageLastUsedAt: Long = 0,
+    // 「おすすめ」ソート用。採用済み利用セッション (UsageEventsから生成、7日観測) の件数と
+    // 最終セッション開始時刻。usageLaunchCount/usageLastUsedAt (Recent/Count, 30日) とは別集計。
+    val recommendedSessionCount: Int = 0,
+    val recommendedLastSessionAt: Long = 0,
 )

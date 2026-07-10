@@ -1444,3 +1444,128 @@ recent/count sort、未許可時の fallback、設定導線、ソート後の先
 ### 判断
 
 - accepted (2026-07-07)。Pixel 10a 実機確認チェックリストが全て OK となったため受け入れ済みとする。
+
+---
+
+## 2026-07-11 「おすすめ」ソート (第1段階) 追加 — 未受容・実機確認待ち
+
+### 目的
+
+既存の最近順・回数順は「過去によく使ったアプリ」を上位にするだけで、
+「ユーザーがこれから起動したい可能性が高いアプリ」を近似できていなかった
+(起動した覚えがないアプリの上位表示、Calendar等バックグラウンド処理の影響、
+常用アプリの上位固定、たまたま一度開いたアプリの過大評価)。
+第1段階として、UsageEventsから妥当な利用セッションを生成し、
+直近性 (recency) と短期間の反復利用 (frequency) だけで順位を計算する
+「おすすめ」ソートを追加した。時間帯バケット・USER_INTERACTION信頼度・
+タグ加点・機械学習等は今回のスコープ外 (下記「除外した機能」参照)。
+
+### 採用したセッション定義
+
+UsageEventsのフォアグラウンド遷移イベントを、そのまま起動回数として数えず、
+packageName単位の利用セッションへ変換した。
+
+- Activityクラス単位で前景状態を管理し (`Set<className>`)、package内に前景Activityが
+  1つ以上存在する期間を1つの候補セッションとして扱う。同一package内のActivity遷移
+  (画面遷移) だけでは複数起動として数えない。
+- 実機のSDK定数を確認した結果、`ACTIVITY_RESUMED` は `MOVE_TO_FOREGROUND` と、
+  `ACTIVITY_PAUSED` は `MOVE_TO_BACKGROUND` と同一の整数値のエイリアスであり、
+  別イベントとして二重に届くことはないと判明した (当初の設計は別値である前提だったため、
+  実装中に発見し設計を修正した)。API29+限定の追加終了シグナルである `ACTIVITY_STOPPED` のみ
+  APIレベルで含めるかどうかを切り替える。`ACTIVITY_PAUSED` の後に `ACTIVITY_STOPPED` が
+  重ねて届いても、前景集合からの除去がidempotentなため二重計上しない。
+- 対応しないEND (前景集合にないclassNameのEND) は無視し、重複START (既に前景集合にある
+  classNameのSTART) も無視する。クラッシュ・負数状態にはならない。
+- 観測期間終端で前景Activityが残っている場合は、そこでセッションを閉じる (windowEndで打ち切り)。
+- 近接セッションの統合 (MERGE_GAP_MS以内) を先に行い、そのあとで短時間セッションの除外
+  (MIN_SESSION_MS未満) を行う。画面回転等による瞬間的な前景断絶を1つの利用として救いつつ、
+  統合後もなお短いセッションだけを除外する。
+
+### 定数
+
+- OBSERVATION_DAYS = 7日 (`AppRepository.RECOMMENDED_OBSERVATION_DAYS`)。
+  既存の最近順・回数順が使う `USAGE_STATS_DAYS = 30` とは独立しており、そちらの挙動は変えていない。
+  queryEventsが実際に返した範囲のイベントだけを使う (7日分保持されている前提は置かない)。
+- MIN_SESSION_MS = 2,000ms (2秒未満は除外、2秒ちょうどは採用)。
+- MERGE_GAP_MS = 30,000ms (30秒以内の再開を統合、境界値30秒ちょうども統合対象)。
+
+### スコア式
+
+```
+recency(a)   = 2 ^ (-age(a) / 24時間)          (sessionCount=0なら0、ageが負なら0として扱う)
+frequency(a) = ln(1 + count(a)) / ln(1 + 8)     (最大1.0にclamp、表示対象集合では正規化しない)
+score(a)     = 0.65 * recency(a) + 0.35 * frequency(a)
+```
+
+同点処理は「スコア降順 → 最終セッション時刻降順 → アプリ名昇順 → packageName昇順 →
+className昇順」の完全決定的な比較。履歴なしアプリ (採用セッション0件) は履歴があるアプリの
+後方に配置され、履歴なしアプリ同士は名前順 (新規インストール補正なし)。
+UsageStats権限がない場合は既存の最近順・回数順と同じ規則で名前順へフォールバックする
+(権限付与・解除後の再集計経路は変更していない)。
+
+### 今回除外した機能 (第1段階のスコープ外)
+
+平日/休日区別、時間帯バケット、利用間隔の中央値/周期性、USER_INTERACTIONによるconfidence、
+pixel-tag-drawer内launchCount/lastLaunchedAtとの統合、新規インストール補正、
+totalTimeInForegroundによる加点、アプリ固有の除外リスト、DBスキーマ変更、常駐監視、
+タグによるスコア加点、手動ピン留め、機械学習。
+
+### 実装範囲
+
+新規: `data/UsageSession.kt` (セッション生成、Android非依存の純粋関数)、
+`ui/RecommendedScore.kt` (スコア計算、純粋関数)。
+変更: `data/AppRepository.kt` (`loadRecommendedUsage()`)、`model/LauncherApp.kt`
+(`recommendedSessionCount`/`recommendedLastSessionAt`追加、DBスキーマ変更なし)、
+`ui/AppSortMode.kt` (`Recommended`モード追加)、`ui/AppListViewModel.kt`
+(usage mergeと同じタイミングでrecommended統計も取得、上位10件の診断ログ)、
+`MainActivity.kt` (ソートメニューに「おすすめ」追加、SortOrderCache署名にrecommended値を追加)。
+
+### 単体テスト結果
+
+今回が本プロジェクト初のユニットテスト導入 (`app/src/test`、JUnit4追加、Robolectric不使用)。
+セッション生成17件・スコア計算12件・ソート順/同点処理7件の計36件、全て成功。
+
+```
+UsageSessionTest:            17 tests, 0 failed
+RecommendedScoreTest:        12 tests, 0 failed
+AppSortModeRecommendedTest:   7 tests, 0 failed
+```
+
+### ビルド結果
+
+- `./gradlew testDebugUnitTest` : BUILD SUCCESSFUL (36 tests, 0 failed)
+- `./gradlew assembleDebug` : BUILD SUCCESSFUL
+- `git diff --check` : 該当なし (CRLF/LF警告のみ、コミット対象の空白エラーなし)
+- `./gradlew lintDebug` : 既定のJVMヒープでは `Metaspace` 不足で失敗した
+  (このリポジトリの `org.gradle.jvmargs` がlint workerには不足気味という環境要因、
+  今回の変更が原因ではない)。ヒープを一時的に引き上げて再実行したところ完走し、
+  1 error / 51 warnings / 1 hint。唯一のerrorは `MainActivity.kt:310` の
+  `dynamicLightColorScheme` (API31必須、NewApi) で、今回のdiff範囲外の既存コード。
+  今回追加・変更したファイル (UsageSession.kt, RecommendedScore.kt, AppSortMode.kt,
+  AppListViewModel.kt, LauncherApp.kt) に新規lint指摘は無し。`AppRepository.kt`の
+  warning 1件 (`UseKtx`) も既存コード (`loadIconBitmap`) が行番号シフトで再掲されたもの。
+
+### 実機確認待ち
+
+未実施。次回、Pixel 10aで以下を重点確認する。
+
+- **Calendarなどの誤検出が改善するか** (最重要): 「おすすめ」上位に開いた覚えのないアプリが
+  来ないか。診断ダイアログの `[RECO]` ログで上位10件のscore/sessionCount/lastSessionTime/
+  recency/frequencyを確認する。
+- 通常の1日を通して朝/日中/夜でトップ数件が体感と一致するか。
+- 常用アプリ (LINE/ブラウザ等) が常に上位固定にならないか。
+- 新規インストールアプリが下部 (名前順) に収まり、数日後に順位が上がってくるか。
+- UsageStats権限剥奪時に名前順へ正しくフォールバックするか (既存経路の回帰確認)。
+- 名前順・最近順・回数順・タグANDフィルタ・タグなしフィルタ・検索・List/Grid切替・
+  タグ編集・アプリ起動・ソートモードの保存復元・アイコン遅延ロード時の並び順安定化に
+  回帰がないか。
+
+### 既知の制約
+
+- 重み (0.65/0.35)、半減期 (24時間)、飽和セッション数 (8)、MIN_SESSION_MS、MERGE_GAP_MS、
+  OBSERVATION_DAYSはいずれも実測データに基づかない初期仮定値であり、実機dogfoodingでの
+  調整対象。
+- `loadRecommendedUsage()` は既存のusage merge (最近順・回数順用、30日) と同じタイミングで
+  常に取得する設計とした (どのソートモードでもモード切替が即座に効く既存体験を維持するため)。
+  そのぶんmerge処理あたりのUsageStatsManager呼び出しが1回増える。実機での初期表示速度への
+  影響は未計測。

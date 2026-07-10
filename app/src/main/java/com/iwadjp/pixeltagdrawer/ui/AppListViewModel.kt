@@ -11,6 +11,7 @@ import com.iwadjp.pixeltagdrawer.data.AppPreferences
 import com.iwadjp.pixeltagdrawer.data.AppRepository
 import com.iwadjp.pixeltagdrawer.model.LauncherApp
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -217,8 +218,15 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
                     // 権限なしなら usage は来ないので、並び確定待ちも解除して Name で即表示する
                     initialSortSettling = false,
                     apps = state.apps.map {
-                        if (it.usageLaunchCount != 0 || it.usageLastUsedAt != 0L) {
-                            it.copy(usageLaunchCount = 0, usageLastUsedAt = 0L)
+                        if (it.usageLaunchCount != 0 || it.usageLastUsedAt != 0L ||
+                            it.recommendedSessionCount != 0 || it.recommendedLastSessionAt != 0L
+                        ) {
+                            it.copy(
+                                usageLaunchCount = 0,
+                                usageLastUsedAt = 0L,
+                                recommendedSessionCount = 0,
+                                recommendedLastSessionAt = 0L,
+                            )
                         } else {
                             it
                         }
@@ -234,22 +242,34 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
             return
         }
 
-        val usageStats = withContext(Dispatchers.IO) { repository.loadUsageStats() }
+        // Recommended の入力 (7日観測のセッション集計) も、Recent/Count と同じ merge タイミングで
+        // 一緒に取得する。これにより権限チェック・二重取得抑制・settling 解除の既存経路をそのまま
+        // 共用でき、モード切替時に改めて取得を待たず即座に並び替えられる (Recent/Count と同じ体験)。
+        val (usageStats, recommendedStats) = withContext(Dispatchers.IO) {
+            val usageDeferred = async { repository.loadUsageStats() }
+            val recommendedDeferred = async { repository.loadRecommendedUsage() }
+            usageDeferred.await() to recommendedDeferred.await()
+        }
         if (generation != loadGeneration) return
         val wasSettling = _uiState.value.initialSortSettling
         var appliedCount = 0
         _uiState.update { state ->
             val mergedApps = state.apps.map { app ->
                 val usage = usageStats[app.packageName]
+                val recommended = recommendedStats[app.packageName]
                 app.copy(
                     usageLaunchCount = usage?.launchCount ?: 0,
                     usageLastUsedAt = usage?.lastUsedAt ?: 0L,
+                    recommendedSessionCount = recommended?.sessionCount ?: 0,
+                    recommendedLastSessionAt = recommended?.lastSessionStartAt ?: 0L,
                 )
             }
             PerfLog.log(
                 "[USAGE] usage stats loaded packages=${usageStats.size} " +
                     "nonZeroRecent=${mergedApps.count { it.usageLastUsedAt > 0L }} " +
-                    "nonZeroCount=${mergedApps.count { it.usageLaunchCount > 0 }}",
+                    "nonZeroCount=${mergedApps.count { it.usageLaunchCount > 0 }} " +
+                    "recommendedPackages=${recommendedStats.size} " +
+                    "nonZeroRecommended=${mergedApps.count { it.recommendedSessionCount > 0 }}",
             )
             // usage 反映済みの並びが作れるようになったので、初回描画の保留を解除する
             if (wasSettling) {
@@ -260,11 +280,39 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
                         "nonZeroCount=${mergedApps.count { it.usageLaunchCount > 0 }}",
                 )
             }
+            if (state.sortMode == AppSortMode.Recommended) {
+                logTopRecommended(mergedApps)
+            }
             appliedCount = mergedApps.size
             state.copy(usageStatsAccessGranted = true, apps = mergedApps, initialSortSettling = false)
         }
         lastUsageMergeAppliedCount = appliedCount
         lastUsageMergeAtMs = SystemClock.elapsedRealtime()
+    }
+
+    /**
+     * 「おすすめ」上位10件を診断ログへ出す (実機評価用)。既存の PerfLog リングバッファへ積むだけで、
+     * 専用UIは追加しない (診断ダイアログの既存 report() でそのまま確認できる)。
+     * ソートモードが Recommended の時の merge 完了時のみ呼ぶため、通常運用でのログ増加は限定的。
+     */
+    private fun logTopRecommended(apps: List<LauncherApp>) {
+        val now = System.currentTimeMillis()
+        val ranked = apps
+            .filter { it.recommendedSessionCount > 0 }
+            .sortedByDescending { recommendedScore(it.recommendedSessionCount, now - it.recommendedLastSessionAt) }
+            .take(10)
+        PerfLog.log("[RECO] top${ranked.size} (of nonZero=${apps.count { it.recommendedSessionCount > 0 }})")
+        ranked.forEachIndexed { index, app ->
+            val age = now - app.recommendedLastSessionAt
+            val recency = recommendedRecency(app.recommendedSessionCount, age)
+            val frequency = recommendedFrequency(app.recommendedSessionCount)
+            val score = recommendedScore(app.recommendedSessionCount, age)
+            PerfLog.log(
+                "[RECO] #${index + 1} label=${app.safeLogLabel()} pkg=${app.packageName} " +
+                    "score=${score.round3()} sessions=${app.recommendedSessionCount} " +
+                    "lastSession=${app.recommendedLastSessionAt} recency=${recency.round3()} frequency=${frequency.round3()}",
+            )
+        }
     }
 
     /**
@@ -517,3 +565,6 @@ private fun LauncherApp.appId(): String = "$packageName/$className"
 private fun LauncherApp.hasLaunchStats(): Boolean = launchCount > 0 || lastLaunchedAt > 0L
 
 private fun LauncherApp.safeLogLabel(): String = label.take(24)
+
+/** 診断ログ表示専用の丸め (小数第3位)。比較・並び替えには使わない。 */
+private fun Double.round3(): Double = kotlin.math.round(this * 1000.0) / 1000.0
