@@ -22,6 +22,14 @@ android {
         // BuildConfig.APPLICATION_ID を使うため有効化する。
         buildConfig = true
     }
+
+    // Robolectric + Compose UI テスト (JVM単体テスト) 用。実機/エミュレータ不要で
+    // レイアウトの回帰 (タグ管理パネルが可視か・終了操作が押せるか) を検証する。
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+        }
+    }
 }
 
 dependencies {
@@ -42,4 +50,12 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling")
 
     testImplementation("junit:junit:4.13.2")
+    // Robolectric 上で Compose のセマンティクスツリーを検証するための最小構成。
+    // ui-test-manifest は公式ドキュメント通り debugImplementation で追加する
+    // (testImplementation だとテスト用マニフェストへ ComponentActivity の
+    // intent-filter が正しく反映されず、Robolectric 上で解決できなかった)。
+    testImplementation("androidx.compose.ui:ui-test-junit4")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
+    testImplementation("org.robolectric:robolectric:4.14.1")
+    testImplementation("androidx.test.ext:junit:1.2.1")
 }

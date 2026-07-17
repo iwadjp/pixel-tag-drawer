@@ -25,6 +25,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -36,6 +37,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -474,6 +476,19 @@ fun AppListScreen(
 
     // 操作エリア (タイトル/タグ/検索/件数) は固定し、アプリ一覧だけをスクロールさせる。
     // そのため全体は Column、一覧部分のみ weight(1f) を持つ LazyColumn にする。
+    //
+    // タグ管理パネル (TagSection) は weight で一覧側と比率を取り合わせない。
+    // weight(1f, fill=false) 同士の比率制御は、画面上の他の固定要素 (検索欄・件数/並び替え行・
+    // 終了フッターなど) が消費する分だけ「残り空間」が実機では想定より小さくなり、
+    // パネルがほぼ潰れる不具合を引き起こしたため撤回した。代わりに BoxWithConstraints で
+    // 実際に使える画面高を取得し、その割合から TagSection 専用の上限高さを直接計算する
+    // (heightIn(max=...) で自己完結させ、アプリ一覧の weight(1f) とは競合させない)。
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        // 画面高の60%を上限にしつつ、極端に小さい/大きい画面でも破綻しないよう下限・上限で挟む。
+        // 下限 220dp: タグ追加欄+ホーム追加行+タグ数行程度は最低限スクロールなしで見える高さ。
+        // 上限 560dp: タブレット等で画面高に余裕があっても、検索・アプリ一覧・終了ボタン側の
+        // 最低限の表示領域を必ず残す。
+        val tagSectionMaxHeight = (maxHeight * 0.6f).coerceIn(220.dp, 560.dp)
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -565,8 +580,12 @@ fun AppListScreen(
         }
 
         // タグ管理UIは開いているときだけ表示。ショートカット簡素表示中は隠す。
+        // タグ数やメッセージでどれだけ内容が伸びても、下の一覧や「タグ管理を終了」を
+        // 画面外へ押し出さないよう heightIn(max=tagSectionMaxHeight) で自己完結的に上限を持たせ、
+        // 超えた分だけ内部でスクロールさせる (アプリ一覧の weight(1f) とは競合しない)。
         if (showTagManagement && !simplified) {
             TagSection(
+                modifier = Modifier.heightIn(max = tagSectionMaxHeight),
                 state = tagState,
                 shortcutMessage = shortcutMessage,
                 onNameChange = tagViewModel::updateTagName,
@@ -1120,6 +1139,8 @@ fun AppListScreen(
                     )
                 }
 
+                // タグ管理パネルは独自の heightIn(max=...) で自己完結して上限を持つため、
+                // ここは以前どおり weight(1f) 単独でよい (weight による比率競合はさせない)。
                 Box(modifier = Modifier.weight(1f)) {
                 when (displayMode) {
                     AppDisplayMode.List -> {
@@ -1202,11 +1223,41 @@ fun AppListScreen(
                 }
             }
         }
+
+        // タグ管理パネルの中身がどれだけ伸びても (ホーム追加メッセージ・タグ多数など)、
+        // 終了操作だけは常に画面内・ナビゲーションバーの上に固定表示する。
+        if (showTagManagement && !simplified) {
+            TagManagementExitBar(onExit = { showTagManagement = false })
+        }
+    }
+    }
+}
+
+// タグ管理を開いている間だけ表示する、常に到達可能な固定終了操作。
+// TagSection がどれだけ内容を持っていても (weight やスクロール量に関わらず)、
+// 呼び出し元の Column で非weight要素として配置される限りこの行自体が画面外に押し出されることはない。
+// internal: 単体で Compose テストするために private から緩めている (振る舞いは従来のまま)。
+@Composable
+internal fun TagManagementExitBar(onExit: () -> Unit, modifier: Modifier = Modifier) {
+    Column(modifier = modifier.fillMaxWidth()) {
+        HorizontalDivider()
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(vertical = 8.dp),
+            horizontalArrangement = Arrangement.Center,
+        ) {
+            Button(onClick = onExit) {
+                Text("タグ管理を終了")
+            }
+        }
     }
 }
 
 @Composable
-private fun TagSection(
+internal fun TagSection(
+    modifier: Modifier = Modifier,
     state: com.iwadjp.pixeltagdrawer.ui.TagUiState,
     shortcutMessage: String?,
     onNameChange: (String) -> Unit,
@@ -1226,10 +1277,19 @@ private fun TagSection(
     onConfirmUntaggedLabel: () -> Unit,
     onCancelEditUntaggedLabel: () -> Unit,
 ) {
+    // ヘッダー (タグ追加欄・ホーム追加行・一時メッセージ等) を非スクロールで固定し、
+    // タグ一覧だけを weight+verticalScroll で囲む案も検討したが、ヘッダー自体の実高さが
+    // 呼び出し元の heightIn(max=...) を超える組み合わせ (メッセージ表示中の小さい画面など) で
+    // タグ一覧側が 0dp まで押し潰されて完全に消える (スクロールしても出てこない) ケースを
+    // Robolectric テストで確認したため撤回した。TagSection 全体を1つの verticalScroll に
+    // まとめることで、ヘッダーを含め内容がどれだけ多くても「消える (二度と出せない)」ことは
+    // 起こらず、常にスクロールで到達可能な状態を保証する。全体の最大高さは呼び出し元が
+    // modifier (heightIn(max=...)) で与える。
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
-            .padding(top = 8.dp),
+            .padding(top = 8.dp)
+            .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Text(
@@ -1338,12 +1398,10 @@ private fun TagSection(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         } else {
-            // タグが多くても全タグへ到達できるよう、一覧部だけ高さ上限付きで縦スクロールにする。
-            // タグ管理を開いている時は広めに使ってよい (常用時は閉じている)。
+            // タグ一覧自体には個別のスクロール/高さ上限を持たせない。TagSection 全体
+            // (呼び出し元で heightIn(max=...) + このファイル内の verticalScroll) の
+            // 1つのスクロール領域にまとめて任せる。
             Column(
-                modifier = Modifier
-                    .heightIn(max = 360.dp)
-                    .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
             state.tags.forEachIndexed { index, tag ->
