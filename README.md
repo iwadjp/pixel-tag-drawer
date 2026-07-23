@@ -9,6 +9,35 @@ HOMEランチャーとしては動作せず、通常のアプリとしてPixel L
 ビルド設定上のminSdkは26（Android 8.0）です。現在はPixel 10aで開発・動作確認しています。
 ほかの端末やランチャーでの動作は未検証であり、正常な動作を保証するものではありません。
 
+## スクリーンショット
+
+<table>
+  <tr>
+    <td align="center">
+      <strong>全アプリ表示</strong><br>
+      <sub>すべての起動可能アプリをグリッド表示</sub><br>
+      <img src="docs/images/all-apps.png" alt="全アプリのグリッド表示" width="240">
+    </td>
+    <td align="center">
+      <strong>単一タグで絞り込み</strong><br>
+      <sub>Googleタグで対象アプリを絞り込み</sub><br>
+      <img src="docs/images/google-tag.png" alt="Googleタグによる絞り込み" width="240">
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <strong>複数タグのAND絞り込み</strong><br>
+      <sub>MediaとGoogleをAND条件で絞り込み</sub><br>
+      <img src="docs/images/media-google-and-filter.png" alt="MediaとGoogleのAND絞り込み" width="240">
+    </td>
+    <td align="center">
+      <strong>タグ管理</strong><br>
+      <sub>タグの作成・並べ替え・名前変更・削除</sub><br>
+      <img src="docs/images/tag-management.png" alt="タグ管理画面" width="240">
+    </td>
+  </tr>
+</table>
+
 ## 主な特徴
 
 - 起動可能なアプリを「全アプリ」「選択したタグ」「タグなし」で表示
