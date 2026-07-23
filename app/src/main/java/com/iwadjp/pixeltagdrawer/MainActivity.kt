@@ -10,11 +10,13 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Typeface
 import android.graphics.drawable.Icon
+import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.annotation.ChecksSdkIntAtLeast
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -67,6 +69,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.dynamicLightColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -309,7 +312,11 @@ fun PixelTagDrawerApp(
     initialNormalLauncher: Boolean = false,
 ) {
     val context = LocalContext.current
-    val colorScheme = dynamicLightColorScheme(context)
+    val colorScheme = if (supportsDynamicColor()) {
+        dynamicLightColorScheme(context)
+    } else {
+        lightColorScheme()
+    }
 
     MaterialTheme(colorScheme = colorScheme) {
         Surface(modifier = Modifier.fillMaxSize()) {
@@ -321,6 +328,10 @@ fun PixelTagDrawerApp(
         }
     }
 }
+
+@ChecksSdkIntAtLeast(api = Build.VERSION_CODES.S)
+internal fun supportsDynamicColor(): Boolean =
+    Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 
 @Composable
 fun AppListScreen(
