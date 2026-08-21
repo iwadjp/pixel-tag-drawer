@@ -1,6 +1,7 @@
 package com.iwadjp.pixeltagdrawer.data
 
 import android.content.Context
+import androidx.room.withTransaction
 import com.iwadjp.pixeltagdrawer.data.db.AppTagCrossRef
 import com.iwadjp.pixeltagdrawer.data.db.PixelTagDrawerDatabase
 import com.iwadjp.pixeltagdrawer.data.db.TagEntity
@@ -10,10 +11,13 @@ import kotlinx.coroutines.flow.Flow
  * タグ機能の土台となるRepository。TagDao / AppTagDao を束ねる。
  * 今回は土台のみで、ViewModel / UI からはまだ使わない。
  */
-class TagRepository(context: Context) {
+class TagRepository(private val db: PixelTagDrawerDatabase) {
 
-    private val tagDao = PixelTagDrawerDatabase.getInstance(context).tagDao()
-    private val appTagDao = PixelTagDrawerDatabase.getInstance(context).appTagDao()
+    /** 通常の呼び出し元向け: Context からプロセス内シングルトンDBを解決する。 */
+    constructor(context: Context) : this(PixelTagDrawerDatabase.getInstance(context))
+
+    private val tagDao = db.tagDao()
+    private val appTagDao = db.appTagDao()
 
     /** タグ一覧を監視する (sortOrder→name 順)。 */
     fun observeTags(): Flow<List<TagEntity>> = tagDao.observeAll()
@@ -30,8 +34,15 @@ class TagRepository(context: Context) {
         return tagDao.insert(TagEntity(name = trimmed, sortOrder = tagDao.nextSortOrder()))
     }
 
-    /** タグを削除する。 */
-    suspend fun deleteTag(tag: TagEntity) = tagDao.delete(tag)
+    /**
+     * タグを削除する。
+     * 削除前に、そのtagIdを参照する app_tags を先に削除する (孤児行を残さないため)。
+     * 途中失敗で片方だけ消えないよう1トランザクションにまとめる。
+     */
+    suspend fun deleteTag(tag: TagEntity) = db.withTransaction {
+        appTagDao.deleteByTagId(tag.tagId)
+        tagDao.delete(tag)
+    }
 
     /**
      * タグ名を変更する。name は trim し、空文字なら更新しない。

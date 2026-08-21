@@ -9,7 +9,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 /**
  * タグDB。launcher_apps / tags / app_tags を保持する。
- * version = 3 (tags に displayLabel を追加し、sortOrder を表示順で backfill)。
+ * version = 4 (app_tags の孤児行 (存在しないtagIdを参照する行) を一括削除)。
  */
 @Database(
     entities = [
@@ -17,7 +17,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         TagEntity::class,
         AppTagCrossRef::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = false,
 )
 abstract class PixelTagDrawerDatabase : RoomDatabase() {
@@ -62,6 +62,19 @@ abstract class PixelTagDrawerDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v3→v4: app_tags のうち、存在しない tagId を参照する孤児行を削除する。
+         * 原因は TagRepository.deleteTag がタグ削除時に対応する app_tags を消していなかったこと
+         * (今回同時に修正済み)。有効な (tagsに存在するtagIdを参照する) app_tags 行は一切変更しない。
+         */
+        internal val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "DELETE FROM app_tags WHERE tagId NOT IN (SELECT tagId FROM tags)",
+                )
+            }
+        }
+
         @Volatile
         private var instance: PixelTagDrawerDatabase? = null
 
@@ -71,7 +84,7 @@ abstract class PixelTagDrawerDatabase : RoomDatabase() {
                     context.applicationContext,
                     PixelTagDrawerDatabase::class.java,
                     DB_NAME,
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build().also { instance = it }
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build().also { instance = it }
             }
         }
     }

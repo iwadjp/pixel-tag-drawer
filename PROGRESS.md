@@ -1726,3 +1726,43 @@ Composeのweight配置ロジックの検討のみに基づく (実機描画未�
 - Recommended追加後のUsage Access OFF / ON回帰確認: `ACCEPTED`。
 - 2026-07-27時点で、短時間の未確認実機FB 4件は全て完了。
 - 現時点で直ちに対応すべき明確な実機FBはなく、長期dogfooding継続・新規FB待ちとする。
+
+---
+
+## 2026-08-21 Export/Import バックアップ機能とorphan app_tags修正の実機確認
+
+- **対象コミット**: `Add backup restore and repair tag assignments`
+- **対象端末**: Google Pixel 10a
+- **配布方法**: debug APK 更新インストール
+- **対象機能**:
+  - versioned JSON backup (Export / Import)
+  - Room 3テーブル (tags / launcher_apps / app_tags) + preferences 7項目の書き出し/復元
+  - SAF (CreateDocument / OpenDocument) 経由のファイル選択
+  - Import前の置き換え確認ダイアログ
+  - validation失敗時は非破壊 (DB/prefs変更なし)
+  - タグ削除時の app_tags cleanup (orphan行の再発防止)
+  - DB v3→v4、MIGRATION_3_4 による既存orphan app_tagsの一括削除
+- **結果**: test ok
+
+### 確認項目
+
+- [x] debug APK 上書きインストール成功
+- [x] DB migration 3→4 成功
+- [x] 既存データ (タグ・アプリ・割り当て) 保持
+- [x] Export/Import メニューUIに問題なし
+- [x] 新規バックアップの書き出し成功
+- [x] 書き出したバックアップの再取得値: tags 17 / launcherApps 207 / appTags 247 / orphan 0
+- [x] バックアップが RESTORE_READY 状態であることを確認
+
+### 判断
+
+Export/Import によるバックアップ復元機能を実機で受け入れた。
+旧 `TagRepository.deleteTag` がタグ削除時に対応する app_tags を消していなかった問題を修正し、
+MIGRATION_3_4 で既存インストールのorphan行も一括削除できることを実機で確認した。
+release signing への移行は次段階として別途扱う。debug→release実機切替はまだ未実施。
+
+### 次候補
+
+- release-signed APK のビルドと検証 (別段階)
+- release版へのimport実運用確認 (Human承認後)
+- dogfooding継続

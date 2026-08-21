@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ShortcutInfo
 import android.content.pm.ShortcutManager
+import android.net.Uri
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
@@ -15,7 +16,9 @@ import android.os.Bundle
 import android.provider.Settings
 import android.util.Log
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.ChecksSdkIntAtLeast
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
@@ -77,6 +80,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
@@ -103,12 +107,15 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.iwadjp.pixeltagdrawer.data.AppPreferences
+import com.iwadjp.pixeltagdrawer.data.backup.BackupImportOutcome
+import com.iwadjp.pixeltagdrawer.data.backup.BackupRepository
 import com.iwadjp.pixeltagdrawer.model.LauncherApp
 import com.iwadjp.pixeltagdrawer.ui.AppListViewModel
 import com.iwadjp.pixeltagdrawer.ui.AppSortMode
 import com.iwadjp.pixeltagdrawer.ui.TagViewModel
 import com.iwadjp.pixeltagdrawer.ui.sortApps
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
@@ -361,6 +368,39 @@ fun AppListScreen(
     // ホーム画面ショートカット作成リクエストの結果メッセージ (タグ管理内に表示)。
     var shortcutMessage by remember { mutableStateOf<String?>(null) }
 
+    // バックアップ (Export/Import)。DB/prefsはメインスレッドを塞がずcoroutineScopeで操作する。
+    val coroutineScope = rememberCoroutineScope()
+    val backupRepository = remember(context) { BackupRepository(context) }
+    var backupResultMessage by remember { mutableStateOf<String?>(null) }
+    var pendingImportUri by remember { mutableStateOf<Uri?>(null) }
+    var showImportConfirm by remember { mutableStateOf(false) }
+
+    val exportBackupLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json"),
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        coroutineScope.launch {
+            backupResultMessage = try {
+                val json = backupRepository.exportJson()
+                context.contentResolver.openOutputStream(uri)?.use { out ->
+                    out.write(json.toByteArray(Charsets.UTF_8))
+                }
+                "バックアップを書き出しました"
+            } catch (e: Exception) {
+                Log.w("Backup", "バックアップの書き出しに失敗しました", e)
+                "バックアップの書き出しに失敗しました"
+            }
+        }
+    }
+
+    val importBackupLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        pendingImportUri = uri
+        showImportConfirm = true
+    }
+
     // 起動計測の診断ダイアログ (adb 不要で計測値を確認/コピーするため)。
     val clipboard = LocalClipboardManager.current
     var showDiagnostics by remember { mutableStateOf(false) }
@@ -587,6 +627,75 @@ fun AppListScreen(
                 onRefresh = { diagnosticsReport = PerfLog.report() },
                 onCopy = { clipboard.setText(AnnotatedString(diagnosticsReport)) },
                 onDismiss = { showDiagnostics = false },
+            )
+        }
+
+        // バックアップ復元の確認。既存データが置き換わることを明示する (Exportには確認不要)。
+        if (showImportConfirm) {
+            AlertDialog(
+                onDismissRequest = {
+                    showImportConfirm = false
+                    pendingImportUri = null
+                },
+                title = { Text("バックアップから復元しますか？") },
+                text = {
+                    Text(
+                        "現在のタグ・アプリの割り当て・関連する設定が、選択したバックアップの内容で置き換わります。" +
+                            "使用状況アクセスの許可やホーム画面のショートカットは対象外のため、必要なら復元後に再設定してください。",
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        val uri = pendingImportUri
+                        showImportConfirm = false
+                        pendingImportUri = null
+                        if (uri != null) {
+                            coroutineScope.launch {
+                                backupResultMessage = try {
+                                    val text = context.contentResolver.openInputStream(uri)?.use { input ->
+                                        input.readBytes().toString(Charsets.UTF_8)
+                                    }
+                                    when {
+                                        text == null -> "バックアップの読み込みに失敗しました"
+                                        else -> when (backupRepository.importJson(text)) {
+                                            BackupImportOutcome.Success ->
+                                                "復元が完了しました。反映のためアプリを再起動してください"
+                                            BackupImportOutcome.InvalidBackup -> "無効なバックアップファイルです"
+                                            BackupImportOutcome.UnsupportedFormat -> "対応していない形式です"
+                                            BackupImportOutcome.RestoreFailure -> "復元に失敗しました"
+                                        }
+                                    }
+                                } catch (e: Exception) {
+                                    Log.w("Backup", "バックアップの読み込みに失敗しました", e)
+                                    "バックアップの読み込みに失敗しました"
+                                }
+                            }
+                        }
+                    }) {
+                        Text("続行")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = {
+                        showImportConfirm = false
+                        pendingImportUri = null
+                    }) {
+                        Text("キャンセル")
+                    }
+                },
+            )
+        }
+
+        // Export/Import の結果メッセージ。stack traceは出さず、短い日本語メッセージのみ表示する。
+        backupResultMessage?.let { msg ->
+            AlertDialog(
+                onDismissRequest = { backupResultMessage = null },
+                confirmButton = {
+                    TextButton(onClick = { backupResultMessage = null }) {
+                        Text("OK")
+                    }
+                },
+                text = { Text(msg) },
             )
         }
 
@@ -1100,6 +1209,21 @@ fun AppListScreen(
                                         },
                                     )
                                 }
+                                DropdownMenuItem(
+                                    text = { Text("バックアップを書き出す") },
+                                    onClick = {
+                                        appListMenuExpanded = false
+                                        val stamp = java.time.LocalDate.now().toString()
+                                        exportBackupLauncher.launch("pixel-tag-drawer-backup-$stamp.json")
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("バックアップを復元") },
+                                    onClick = {
+                                        appListMenuExpanded = false
+                                        importBackupLauncher.launch(arrayOf("application/json", "*/*"))
+                                    },
+                                )
                                 DropdownMenuItem(
                                     text = {
                                         Text(

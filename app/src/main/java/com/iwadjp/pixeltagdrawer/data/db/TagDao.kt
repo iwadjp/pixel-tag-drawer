@@ -30,6 +30,21 @@ interface TagDao {
     @Query("SELECT * FROM tags ORDER BY sortOrder ASC, name COLLATE NOCASE ASC")
     fun observeAll(): Flow<List<TagEntity>>
 
+    /** バックアップ書き出し用の一括取得 (Flow ではなく1回だけ取得)。 */
+    @Query("SELECT * FROM tags ORDER BY sortOrder ASC, name COLLATE NOCASE ASC")
+    suspend fun getAllOnce(): List<TagEntity>
+
+    /** バックアップ復元用: 全行削除。呼び出し側でトランザクションに包むこと。 */
+    @Query("DELETE FROM tags")
+    suspend fun deleteAll()
+
+    /**
+     * バックアップ復元用: tagId を明示した状態で一括挿入する (app_tags との参照整合性を保つため)。
+     * 復元前に deleteAll 済みである前提のため、衝突時は REPLACE で安全側に倒す。
+     */
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(tags: List<TagEntity>)
+
     /** 新規タグを末尾に追加するための次の sortOrder (空なら 0)。 */
     @Query("SELECT COALESCE(MAX(sortOrder) + 1, 0) FROM tags")
     suspend fun nextSortOrder(): Int

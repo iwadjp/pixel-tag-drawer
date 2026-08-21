@@ -57,4 +57,8 @@ interface LauncherAppDao {
 
     @Query("SELECT * FROM launcher_apps")
     suspend fun getAll(): List<LauncherAppEntity>
+
+    /** バックアップ復元用: 全行削除。呼び出し側でトランザクションに包むこと。 */
+    @Query("DELETE FROM launcher_apps")
+    suspend fun deleteAll()
 }
