@@ -1766,3 +1766,42 @@ release signing への移行は次段階として別途扱う。debug→release�
 - release-signed APK のビルドと検証 (別段階)
 - release版へのimport実運用確認 (Human承認後)
 - dogfooding継続
+
+---
+
+## 2026-08-21 Pixel 10a debug署名版 → release署名版 実移行の実機確認
+
+- **対象コミット**: `9fa313f Add backup restore and repair tag assignments`
+- **対象端末**: Google Pixel 10a (dailyuse機)
+- **配布方法**: SafeDrop 経由で release署名APK (`pixel-tag-drawer-v0.1.0-android.apk`) を配布
+- **対象**: debug署名版のアンインストール → release署名版インストール → Export/Importバックアップによるデータ移行
+- **結果**: test all ok
+
+### 確認項目
+
+- [x] debug署名版アンインストール成功
+- [x] release署名版インストール成功
+- [x] 初回起動成功 (fresh installとしてtagsが空の状態を確認)
+- [x] バックアップ復元 (`pixel-tag-drawer-backup-2026-08-21 (1).json`) 成功
+- [x] 復元後の再起動で状態反映を確認
+- [x] タグ一覧の正常復元
+- [x] アプリへのタグ割り当ての正常復元
+- [x] preferences (表示モード・フィルタ・sort設定等) の正常復元
+- [x] Usage Access の手動再許可成功
+- [x] 再許可後、最近使用・起動回数・おすすめ sort が正常動作
+- [x] その他実使用上の問題なし
+
+### 判断
+
+release署名版への実移行を実機で完了・受け入れた。
+旧backup (`pixel-tag-drawer-backup-2026-08-21.json`、orphan 1件を含みinvalid) は使用せず、
+MIGRATION_3_4適用後に再書き出しした新backup (`tags 17 / launcherApps 207 / appTags 247 / orphan 0`) で移行した。
+これにより、Pixel 10aのdaily-use環境は正式なrelease署名鍵で運用される状態になった。
+rollback (debug版再インストール) は不要だった。
+GitHub公開 (push / tag / GitHub Release) はこの記録時点でまだ未実施。
+
+### 次候補
+
+- GitHub公開 (push / tag / GitHub pre-release) — Human承認後
+- pinned shortcutの必要に応じた再作成
+- dogfooding継続
