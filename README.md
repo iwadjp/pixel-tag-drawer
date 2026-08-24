@@ -60,6 +60,20 @@ HOMEランチャーとしては動作せず、通常のアプリとしてPixel L
 許可できません。許可しない場合も、名前順、検索、タグ整理、タグ絞り込みなどは利用でき、
 使用状況が必要な並び順は名前順へフォールバックします。
 
+## ダウンロード / インストール
+
+GitHubのpre-releaseからAPKをsideloadする形式で配布しています。Google Playでの配布ではありません。
+
+1. [v0.1.0 pre-release](https://github.com/iwadjp/pixel-tag-drawer/releases/tag/v0.1.0) を開く
+2. Assetsから`pixel-tag-drawer-v0.1.0-android.apk`をダウンロードする
+3. ダウンロードしたAPKをタップしてインストールする
+
+Androidでは、このソースからのアプリインストールを許可するよう求められる場合があります。また Google Play Protect や Android が、Google Play 外で配布された APK に対して警告を表示することがあります。インストールを進める前に、ダウンロードしたAPKが上記の公式GitHub Releaseから取得したものであることを確認してください。
+
+現時点でPixel 10aでのみ動作確認済みです。他の端末やランチャーでの動作は未検証です。
+
+開発用にソースからビルドしたい場合は、以下の「開発環境」「ビルドと検証」を参照してください。
+
 ## 開発環境
 
 - JDK 21
