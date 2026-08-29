@@ -1,0 +1,7 @@
+Initial public release.
+
+- Tag-based organisation of launchable apps
+- App launching, search, and list/grid views
+- Pinned shortcuts for tag filters
+- Optional usage-based sorting (requires usage access)
+- Local, offline operation: no account, no ads, no analytics, no network access

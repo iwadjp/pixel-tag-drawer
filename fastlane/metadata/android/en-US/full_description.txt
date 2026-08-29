@@ -1,0 +1,37 @@
+Pixel Tag Drawer is a companion app for Android. It lists the launchable apps
+on your device and lets you organise and filter them with your own tags. It
+does not act as a home launcher; you keep using it alongside your existing
+launcher.
+
+Features:
+
+* App list: shows launchable apps as "all apps", a selected tag, or "no tag",
+  in a list or grid view.
+* Tags: assign multiple tags to one app; create, rename and delete tags, and
+  add or remove a tag on many apps at once.
+* AND filter: show only the apps that have all of the selected tags.
+* Search: filter the list by app name or package name.
+* Sorting: by name, by most recently launched, by launch count, or by a
+  usage-based "recommended" order.
+* Pinned shortcuts: add a home-screen shortcut that opens a specific tag
+  filter or the "no tag" filter.
+
+Usage access (optional):
+
+* The "recently launched", "launch count" and "recommended" sort orders use
+  Android's UsageStats and UsageEvents, aggregated on the device (last 30 days
+  for the first two, last 7 days for "recommended").
+* These orders require granting "usage access" to the app manually in Android
+  settings. There is no runtime permission dialog for it.
+* If usage access is not granted, name sorting, search, tag organisation and
+  tag filtering still work, and the usage-based orders fall back to name order.
+
+Privacy and network:
+
+* Works locally on the device. The app does not request the INTERNET
+  permission and has no code that sends data to an external server.
+* No account, no cloud sync.
+* No ads, no analytics, no tracking.
+
+Requires Android 8.0 (API 26) or later. Developed and tested on a Pixel 10a;
+behaviour on other devices or launchers is not verified.
