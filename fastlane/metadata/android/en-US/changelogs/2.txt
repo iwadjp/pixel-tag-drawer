@@ -1,0 +1,5 @@
+Maintenance release for F-Droid reproducible builds.
+
+- No user-facing changes.
+- Release builds no longer embed VCS (git) revision metadata, so the
+  published APK can be verified byte-for-byte against a build from source.

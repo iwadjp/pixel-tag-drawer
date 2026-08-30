@@ -12,8 +12,20 @@ android {
         applicationId = "com.iwadjp.pixeltagdrawer"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.1.1"
+    }
+
+    buildTypes {
+        release {
+            // F-Droid の Reproducible Builds 用。release build に git revision を
+            // APK (META-INF/version-control-info.textproto) へ埋め込ませない。
+            // 同一ソースを別 commit / 別 checkout から build しても F-Droid 側の
+            // build artifact と byte 単位で比較できるようにする。
+            vcsInfo {
+                include = false
+            }
+        }
     }
 
     buildFeatures {

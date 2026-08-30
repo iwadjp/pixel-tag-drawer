@@ -1,0 +1,5 @@
+F-Droid の Reproducible Builds 対応のためのメンテナンスリリースです。
+
+- 利用者向けの機能変更はありません。
+- release build に VCS (git) リビジョン情報を埋め込まないようにし、公開 APK を
+  ソースからの build と byte 単位で照合できるようにしました。
