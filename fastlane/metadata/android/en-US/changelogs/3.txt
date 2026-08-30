@@ -1,0 +1,5 @@
+Adds the official Pixel Tag Drawer app icon.
+
+- New launcher icon: adaptive icon with foreground, background and
+  themed (monochrome) layers.
+- No other user-facing changes.
