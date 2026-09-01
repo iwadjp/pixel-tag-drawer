@@ -1805,3 +1805,18 @@ GitHub公開 (push / tag / GitHub Release) はこの記録時点でまだ未実�
 - GitHub公開 (push / tag / GitHub pre-release) — Human承認後
 - pinned shortcutの必要に応じた再作成
 - dogfooding継続
+
+---
+
+## 2026-09-01 Google Play移行triggerのHuman decision
+
+- Play state: **WAIT_FOR_FDROID**
+- F-Droid MR !47198のlisting成功を、Google Play準備開始のtriggerとする。
+- F-Droid listing前はtester募集、およびHuman作業を伴うscreenshot撮影、feature graphic作成、
+  Play Console入力を開始しない。v0.1.2のdownloads 9だけではPlayへ昇格しない。
+- listing成功後は、既存metadata/assetsの再利用確認、Play最新要件の公式確認、必要asset、
+  privacy policy / Data safety、signing / Play App Signing、closed testing、tester募集の順に
+  準備を進めてよく、準備開始について追加のHuman decisionは要求しない。
+- Play Console上の公開、提出、課金等の外部不可逆操作には、その時点でもHuman gateを残す。
+- F-Droidがreject、明確なblock、または長期停滞となった場合は無期限に待たず、Play先行を
+  含めてHuman Reviewする。今回は期限を新設せず、既存のF-Droid観測運用を維持する。
