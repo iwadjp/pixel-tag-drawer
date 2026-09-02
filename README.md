@@ -119,6 +119,8 @@ app/build/outputs/apk/debug/app-debug.apk
 診断ログにはアプリ名やパッケージ名などが含まれる場合があります。ログをコピーして共有する際は、
 内容を確認してください。
 
+アプリ内の「⋯」メニューから、上記の内容を含むプライバシーポリシー本文を確認できます。
+
 ## License
 
 [MIT License](LICENSE)

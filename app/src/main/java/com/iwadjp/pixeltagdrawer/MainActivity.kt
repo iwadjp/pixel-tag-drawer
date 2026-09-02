@@ -406,6 +406,9 @@ fun AppListScreen(
     var showDiagnostics by remember { mutableStateOf(false) }
     var diagnosticsReport by remember { mutableStateOf("") }
 
+    // プライバシーポリシー導線 (アプリ内本文をダイアログで表示)。
+    var showPrivacyPolicy by remember { mutableStateOf(false) }
+
     // 表示モード (リスト / アイコン)。前回値を復元し、変更時に保存する。
     var displayMode by remember {
         mutableStateOf(if (prefs.isGridMode) AppDisplayMode.Grid else AppDisplayMode.List)
@@ -628,6 +631,11 @@ fun AppListScreen(
                 onCopy = { clipboard.setText(AnnotatedString(diagnosticsReport)) },
                 onDismiss = { showDiagnostics = false },
             )
+        }
+
+        // プライバシーポリシー本文ダイアログ。
+        if (showPrivacyPolicy) {
+            PrivacyPolicyDialog(onDismiss = { showPrivacyPolicy = false })
         }
 
         // バックアップ復元の確認。既存データが置き換わることを明示する (Exportには確認不要)。
@@ -1222,6 +1230,13 @@ fun AppListScreen(
                                     onClick = {
                                         appListMenuExpanded = false
                                         importBackupLauncher.launch(arrayOf("application/json", "*/*"))
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("プライバシーポリシー") },
+                                    onClick = {
+                                        appListMenuExpanded = false
+                                        showPrivacyPolicy = true
                                     },
                                 )
                                 DropdownMenuItem(
