@@ -1820,3 +1820,29 @@ GitHub公開 (push / tag / GitHub Release) はこの記録時点でまだ未実�
 - Play Console上の公開、提出、課金等の外部不可逆操作には、その時点でもHuman gateを残す。
 - F-Droidがreject、明確なblock、または長期停滞となった場合は無期限に待たず、Play先行を
   含めてHuman Reviewする。今回は期限を新設せず、既存のF-Droid観測運用を維持する。
+
+---
+
+## 2026-09-04 アプリ内プライバシーポリシー導線の実機受入 / v0.1.2 stable化
+
+- **対象コミット**: `8c407b6 Add in-app privacy policy and Play screenshots`
+- **対象端末**: Google Pixel 10a
+- **配布方法**: release署名APK（既存release鍵、証明書 `3cae2b8c…94df`）をSafeDrop経由で上書きインストール
+- **対象機能**: 「⋯」メニューの「プライバシーポリシー」項目とアプリ内本文ダイアログ
+- **結果**: test ok
+
+### 確認項目
+
+- [x] 既存インストール（v0.1.2）へ同一署名で上書きインストール成功（データ保持）
+- [x] 「⋯」→「プライバシーポリシー」項目が表示される
+- [x] ダイアログ本文が崩れず表示される
+- [x] 本文をスクロールできる
+- [x] 「閉じる」で元の一覧画面へ正常復帰
+
+### 判断
+
+`8c407b6` のアプリ内プライバシーポリシー導線をPixel 10a実機で受け入れた。
+これによりv0.1.2 stable化を止めていた唯一のblocker（`8c407b6` のHuman実機確認なし）を解消。
+`8c407b6`（privacy UI）と `d9bf4b8`（READMEのpre-release表現をstable相当へ最小修正、doc-only）を
+`origin/master` へpush。GitHub Release v0.1.2 を pre-release → stable（Latest）へ昇格。
+tag `v0.1.2`（commit `1dad894`）・asset・署名は無変更。F-Droid MR !47198 は tag方式のため影響なし。
