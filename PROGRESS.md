@@ -4,6 +4,23 @@ pixel-tag-drawer の公開用進捗ログ。実機確認やマイルストーン
 
 ---
 
+## 2026-09-23 v0.1.3 F-Droid再現性ビルド修正・正式リリース手順の更新
+
+- **問題**: F-Droid MR !47198のCIで、GitHub Release APKとF-Droidが自前ビルドしたAPKの内容は完全一致するのに、APK Signature Scheme v3の署名コピー検証（`CHUNKED_SHA512`）だけが失敗した。
+- **原因**: `apksigner sign` はデフォルト（`--alignment-preserved` 未指定＝`false`）でAGP(zipflinger)が生成したunsigned APKの既存アライメントを破棄し、独自のアライメントで再パディングする。中身は同じでもZIPコンテナの物理バイト配置がずれ、F-Droidの署名コピー再現性検証が一致しなくなる。`zipalign`自体は無関係（zipflinger出力に対しては無変化）。
+- **確認方法**: F-Droid CIが使用しているfdroidserverの同一コミットの`apksigcopier.copy_apk()`をローカルで実行し、両APKの非META-INFエントリが物理オフセットまで含めて完全一致することを確認してから再署名・再公開した。
+- **対応**: `apksigner sign` に `--alignment-preserved true` を追加して再署名し、GitHub Release APKを差し替え。MR !47198の`fdroid build`ジョブ（pipeline #2874368328）で再現性検証PASSを確認済み。
+
+### 今後のリリース手順（必須事項）
+
+A. **ビルド**: fresh checkout、または`gradlew clean`後のclean buildから実施する。既存プロジェクトディレクトリに残った以前のビルドの中間成果物（`app/build/`の再利用）を使わない。中間成果物が残った状態からビルドすると、dexや baseline profile の内容がF-Droidの自前ビルドと一致しなくなることを確認済み。
+B. **署名**: 既存の正式な署名手順（zipalign→`apksigner sign`、専用keystore、DPAPI保護パスワード）を維持しつつ、`apksigner sign`に必ず`--alignment-preserved true`を指定する。
+C. **公開前検証**: package ID・versionName・versionCode、`zipalign -c`、v2/v3署名、既存証明書SHA-256との一致、APK SHA-256に加えて、F-Droid参照バイナリとの再現性（可能ならF-Droid CIと同じfdroidserver/apksigcopierでの照合）まで確認する。
+D. **公開**: Release assetの実測SHA-256とRelease notes記載を必ず一致させる。公開済みの同名assetを差し替える場合は、旧・新APKのSHA-256を記録し、公開URLから再取得して検証する。
+E. **秘密情報**: 既存のDPAPI保護されたパスワード取得手順を使う。パスワード・秘密鍵・復号用の短命一時ファイルの内容はログやGit管理対象に含めない。
+
+---
+
 ## 2026-09-23 v0.1.3 多言語化・公開準備
 
 - **変更**: 英語を既定UI、端末言語が日本語の場合は日本語UIとし、Releaseビルドでは開発用診断ボタンを非表示にした。
@@ -11,7 +28,7 @@ pixel-tag-drawer の公開用進捗ログ。実機確認やマイルストーン
 - **テスト**: 多言語化の回帰テストを追加。`testDebugUnitTest` は75件全PASS、`assembleDebug`、`assembleRelease`、`lint`、`git diff --check` もPASS。
 - **APK検証**: package ID `com.iwadjp.pixeltagdrawer`、versionName `0.1.3`、versionCode `4`、zipalign、APK Signature Scheme v2/v3を確認。Releaseの`BuildConfig.DEBUG`は`false`で、診断ボタンは表示条件から除外される。
 - **署名**: 既存v0.1.2 APKと同じrelease証明書SHA-256 `3cae2b8c341174c92a91934b4689527f2ac680150644d2d79bc312c71e1894df`。
-- **GitHub**: release commit `0d56a65385916712e00c3dafae5290367675b9a6` を `master` へpushし、tag `v0.1.3` と署名済みAPK付きReleaseを公開。APK SHA-256は `D22E1EE0EDAAA37B579C38457EC034D06164DB20FE2909444D9747BC06DE9F9A`。
+- **GitHub**: release commit `0d56a65385916712e00c3dafae5290367675b9a6` を `master` へpushし、tag `v0.1.3` と署名済みAPK付きReleaseを公開。APK SHA-256は公開当初 `D22E1EE0EDAAA37B579C38457EC034D06164DB20FE2909444D9747BC06DE9F9A` だったが、F-Droid再現性ビルド修正（下記エントリ参照）により `6DD518828776672019E9B0581C40F64237F0B9A411F0FD64734B4309AED14B0D` へ差し替え済み。
 - **実機確認**: 英語・日本語とも今回の公開前実機確認は未実施。実施できない項目は最終報告で未検証とする。
 - **公開範囲**: GitHubのmaster、`v0.1.3` tag、署名済みAPK付きRelease。F-Droid MR !47198 へのpush・metadata変更・コメント返信は行わない。
 
