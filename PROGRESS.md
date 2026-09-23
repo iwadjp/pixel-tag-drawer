@@ -8,7 +8,10 @@ pixel-tag-drawer の公開用進捗ログ。実機確認やマイルストーン
 
 - **変更**: 英語を既定UI、端末言語が日本語の場合は日本語UIとし、Releaseビルドでは開発用診断ボタンを非表示にした。
 - **バージョン**: `versionName 0.1.3` / `versionCode 4`
-- **テスト**: 多言語化の回帰テストを追加。testDebugUnitTest、Debug/Releaseビルド、lint、APK署名検証を実行して公開可否を判定する。
+- **テスト**: 多言語化の回帰テストを追加。`testDebugUnitTest` は75件全PASS、`assembleDebug`、`assembleRelease`、`lint`、`git diff --check` もPASS。
+- **APK検証**: package ID `com.iwadjp.pixeltagdrawer`、versionName `0.1.3`、versionCode `4`、zipalign、APK Signature Scheme v2/v3を確認。Releaseの`BuildConfig.DEBUG`は`false`で、診断ボタンは表示条件から除外される。
+- **署名**: 既存v0.1.2 APKと同じrelease証明書SHA-256 `3cae2b8c341174c92a91934b4689527f2ac680150644d2d79bc312c71e1894df`。
+- **GitHub**: release commit `0d56a65385916712e00c3dafae5290367675b9a6` を `master` へpushし、tag `v0.1.3` と署名済みAPK付きReleaseを公開。APK SHA-256は `D22E1EE0EDAAA37B579C38457EC034D06164DB20FE2909444D9747BC06DE9F9A`。
 - **実機確認**: 英語・日本語とも今回の公開前実機確認は未実施。実施できない項目は最終報告で未検証とする。
 - **公開範囲**: GitHubのmaster、`v0.1.3` tag、署名済みAPK付きRelease。F-Droid MR !47198 へのpush・metadata変更・コメント返信は行わない。
 
