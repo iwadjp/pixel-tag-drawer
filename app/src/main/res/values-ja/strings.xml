@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="edit_button">編集</string>
+    <string name="back_to_list_button">一覧に戻る</string>
+    <string name="content_desc_previous_tag">前のタグ</string>
+    <string name="content_desc_next_tag">次のタグ</string>
+    <string name="search_hint">アプリ名 / パッケージ名で検索</string>
+
+    <string name="restore_backup_title">バックアップから復元しますか？</string>
+    <string name="restore_backup_body">現在のタグ・アプリの割り当て・関連する設定が、選択したバックアップの内容で置き換わります。使用状況アクセスの許可やホーム画面のショートカットは対象外のため、必要なら復元後に再設定してください。</string>
+    <string name="action_continue">続行</string>
+    <string name="action_cancel">キャンセル</string>
+    <string name="action_ok">OK</string>
+
+    <string name="backup_export_success">バックアップを書き出しました</string>
+    <string name="backup_export_failed">バックアップの書き出しに失敗しました</string>
+    <string name="backup_read_failed">バックアップの読み込みに失敗しました</string>
+    <string name="backup_restore_success">復元が完了しました。反映のためアプリを再起動してください</string>
+    <string name="backup_invalid">無効なバックアップファイルです</string>
+    <string name="backup_unsupported_format">対応していない形式です</string>
+    <string name="backup_restore_failed">復元に失敗しました</string>
+
+    <string name="pin_tag_requested">「%1$s」のホーム追加をリクエストしました</string>
+    <string name="pin_add_failed">ホーム画面への追加に失敗しました</string>
+    <string name="pin_untagged_requested">「タグなし」のホーム追加をリクエストしました</string>
+
+    <string name="loading_apps">アプリ一覧を読み込んでいます...</string>
+    <string name="no_launchable_apps">起動可能なアプリが見つかりませんでした</string>
+    <string name="no_matching_apps">一致するアプリがありません</string>
+    <string name="app_count_format">%1$d 件</string>
+
+    <string name="display_mode_list">リスト</string>
+    <string name="display_mode_grid">アイコン</string>
+
+    <string name="sort_name_short">名前順</string>
+    <string name="sort_recent_short">最近</string>
+    <string name="sort_count_short">回数</string>
+    <string name="sort_recommended_short">おすすめ</string>
+    <string name="sort_recent_full">最近起動</string>
+    <string name="sort_count_full">起動回数</string>
+    <string name="usage_sort_note">最近起動・起動回数・おすすめは端末の使用履歴に基づきます。同じパッケージの複数アプリは同じ統計を共有します</string>
+
+    <string name="content_desc_more_options">その他</string>
+    <string name="tag_edit_start">タグ編集</string>
+    <string name="tag_edit_stop">タグ編集を終了</string>
+    <string name="multi_select_on">複数選択</string>
+    <string name="multi_select_off">複数選択をオフ</string>
+    <string name="tag_management_open">タグ管理</string>
+    <string name="tag_management_close">タグ管理を閉じる</string>
+    <string name="usage_access_settings">使用状況アクセス設定</string>
+    <string name="backup_export_menu">バックアップを書き出す</string>
+    <string name="backup_import_menu">バックアップを復元</string>
+    <string name="privacy_policy_menu">プライバシーポリシー</string>
+
+    <string name="tag_management_exit_button">タグ管理を終了</string>
+    <string name="tag_section_title">タグ</string>
+    <string name="new_tag_name_hint">新しいタグ名</string>
+    <string name="add_tag_button">タグ追加</string>
+    <string name="add_to_home_label">ホーム画面に追加</string>
+    <string name="add_untagged_shortcut_button">タグなしを追加</string>
+    <string name="untagged_label_hint">表示名 (空欄なら「タグなし」)</string>
+    <string name="action_save">保存</string>
+    <string name="untagged_pinned_label">タグなし (先頭固定)</string>
+    <string name="display_label_format">表示: %1$s</string>
+    <string name="action_rename">変更</string>
+    <string name="no_tags">タグがありません</string>
+    <string name="tag_name_hint">タグ名</string>
+    <string name="tag_display_label_hint">表示名 (空欄ならタグ名を表示)</string>
+    <string name="content_desc_move_up">上へ移動</string>
+    <string name="content_desc_move_down">下へ移動</string>
+    <string name="pin_tag_to_home_button">ホーム</string>
+    <string name="action_delete">削除</string>
+    <string name="tag_colon_label">タグ:</string>
+    <string name="untagged_label">タグなし</string>
+    <string name="filter_clear_button">解除</string>
+    <string name="tag_panel_title_format">「%1$s」のタグ</string>
+    <string name="action_undo">元に戻す</string>
+    <string name="action_redo">やり直す</string>
+    <string name="action_close">閉じる</string>
+    <string name="tag_button_label">タグ</string>
+
+    <string name="bulk_bar_no_tags_format">一括: %1$d 件 (タグ管理でタグを作成)</string>
+    <string name="bulk_bar_count_format">一括: %1$d 件</string>
+    <string name="bulk_assign_button">付与</string>
+    <string name="bulk_remove_button">解除</string>
+    <string name="bulk_clear_button">クリア</string>
+    <string name="tag_chip_format">#%1$s</string>
+
+    <string name="apps_load_failed">アプリ一覧の読み込みに失敗しました</string>
+    <string name="launch_failed_format">起動に失敗しました: %1$s (%2$s)</string>
+
+    <string name="tag_name_required">タグ名を入力してください</string>
+    <string name="tag_name_duplicate">同名のタグが既にあります</string>
+    <string name="tag_create_failed">タグの作成に失敗しました</string>
+    <string name="tag_update_failed">タグの更新に失敗しました</string>
+    <string name="tag_edit_undone">タグ操作を元に戻しました</string>
+    <string name="tag_undo_failed">元に戻せませんでした</string>
+    <string name="tag_edit_redone">タグ操作をやり直しました</string>
+    <string name="tag_redo_failed">やり直せませんでした</string>
+    <string name="bulk_assign_success_format">%1$d件に一括付与しました</string>
+    <string name="bulk_assign_failed">一括付与に失敗しました</string>
+    <string name="bulk_remove_success_format">%1$d件から一括解除しました</string>
+    <string name="bulk_remove_failed">一括解除に失敗しました</string>
+    <string name="tag_rename_failed">タグの編集に失敗しました</string>
+    <string name="tag_reorder_failed">並び替えに失敗しました</string>
+
+    <string name="privacy_policy_text">"Pixel Tag Drawer プライバシーポリシー\n最終更新日: %1$s\n対象: Pixel Tag Drawer (com.iwadjp.pixeltagdrawer)\n\n概要\nPixel Tag Drawer は、個人情報や機微情報を外部サーバーへ送信しません。\nアプリの処理はすべて端末内で完結します。\n\nアプリがアクセスする情報\n・端末上の起動可能なアプリの一覧 (アプリ名・パッケージ名等):\n  一覧表示・タグ付け・絞り込みのために使用します。取得には\n  ACTION_MAIN / CATEGORY_LAUNCHER によるクエリを用いており、\n  端末上の全アプリを対象とする QUERY_ALL_PACKAGES 権限は使用していません。\n・アプリの使用状況 (任意): 「最近起動した順」「起動回数順」「おすすめ順」を\n  提供するため、許可された場合のみ Android の UsageStats (直近30日) と\n  UsageEvents (直近7日) を端末内で集計します。この許可は Android の設定画面で\n  ユーザーが手動で付与・取り消しでき、通常のランタイム権限ダイアログは表示されません。\n  許可しない場合、これらの並び順は名前順にフォールバックし、他の機能は\n  引き続き利用できます。\n・作成したタグ、タグの割り当て、表示設定: 端末内のデータベースに保存します。\n\nアプリが行わないこと\n・INTERNET権限を要求せず、外部サーバーへ接続するコードを含みません。\n・広告、アクセス解析 (analytics)、クラッシュレポート、テレメトリの機能・\n  SDKは組み込んでいません。\n・アカウント作成やログインを必要としません。\n・位置情報、カメラ、マイク、連絡先へはアクセスしません。\n\n端末外へデータが出る場合\nアプリ自身がデータを送信することはありません。ユーザーの操作によってのみ、\n次の2つの経路でデータが端末の外へ出る可能性があります。\n・バックアップの書き出し: ユーザーがAndroidの標準的なファイル選択画面で\n  選んだ保存先へ、タグ・割り当て・設定を含むファイルを書き出します。\n・診断情報のコピー: アプリ内の診断表示は、ユーザーが「コピー」を\n  操作したときだけクリップボードにコピーされます。アプリ名やパッケージ名を\n  含む場合があるため、共有前に内容を確認してください。\n\nAndroid システムバックアップについて\n端末のAndroid設定でシステムバックアップ (Auto Backup) が有効な場合、\n本アプリのタグ・割り当てを含むローカルデータが、ユーザー自身のGoogleアカウントへの\n端末バックアップに含まれることがあります。これはAndroid/Googleが提供する\n仕組みであり、本アプリが独自に送信するものではありません。取り扱いは\nGoogleのプライバシーポリシーに従います。\n\nデータの保持と削除\nすべてのデータは端末内にのみ保存されます。アプリ内でタグを削除するか、\nAndroidの設定でアプリのストレージを消去するか、アプリをアンインストールすることで\n削除できます。\n\n対象年齢\n本アプリは子ども向けに設計されたものではありません。\n\n変更について\n本ポリシーの内容に重要な変更がある場合は、この文書の最終更新日を更新して\n反映します。\n\nお問い合わせ\n%2$s"</string>
+</resources>

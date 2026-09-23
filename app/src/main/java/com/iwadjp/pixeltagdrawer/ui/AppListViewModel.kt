@@ -7,6 +7,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.iwadjp.pixeltagdrawer.PerfLog
+import com.iwadjp.pixeltagdrawer.R
 import com.iwadjp.pixeltagdrawer.data.AppPreferences
 import com.iwadjp.pixeltagdrawer.data.AppRepository
 import com.iwadjp.pixeltagdrawer.model.LauncherApp
@@ -143,7 +144,7 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
                 _uiState.update {
                     it.copy(
                         isLoading = false,
-                        errorMessage = "アプリ一覧の読み込みに失敗しました",
+                        errorMessage = getApplication<Application>().getString(R.string.apps_load_failed),
                         initialSortSettling = false,
                     )
                 }
@@ -410,7 +411,9 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
             recordLaunch(app)
         } catch (e: Exception) {
             _uiState.update {
-                it.copy(errorMessage = "起動に失敗しました: ${app.label} (${app.packageName})")
+                it.copy(
+                    errorMessage = context.getString(R.string.launch_failed_format, app.label, app.packageName),
+                )
             }
         }
     }

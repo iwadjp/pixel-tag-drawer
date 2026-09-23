@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="edit_button">Edit</string>
+    <string name="back_to_list_button">Back to list</string>
+    <string name="content_desc_previous_tag">Previous tag</string>
+    <string name="content_desc_next_tag">Next tag</string>
+    <string name="search_hint">Search by app name / package name</string>
+
+    <string name="restore_backup_title">Restore from backup?</string>
+    <string name="restore_backup_body">Your current tags, app assignments, and related settings will be replaced with the contents of the selected backup. Usage Access permission and Home screen shortcuts are not included, so re-configure them after restoring if needed.</string>
+    <string name="action_continue">Continue</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_ok">OK</string>
+
+    <string name="backup_export_success">Backup saved</string>
+    <string name="backup_export_failed">Failed to save backup</string>
+    <string name="backup_read_failed">Failed to read backup file</string>
+    <string name="backup_restore_success">Restore complete. Restart the app to apply the changes</string>
+    <string name="backup_invalid">Invalid backup file</string>
+    <string name="backup_unsupported_format">Unsupported format</string>
+    <string name="backup_restore_failed">Failed to restore backup</string>
+
+    <string name="pin_tag_requested">Requested to add %1$s to the Home screen</string>
+    <string name="pin_add_failed">Failed to add to the Home screen</string>
+    <string name="pin_untagged_requested">Requested to add Untagged to the Home screen</string>
+
+    <string name="loading_apps">Loading apps…</string>
+    <string name="no_launchable_apps">No launchable apps found</string>
+    <string name="no_matching_apps">No matching apps</string>
+    <string name="app_count_format">%1$d items</string>
+
+    <string name="display_mode_list">List</string>
+    <string name="display_mode_grid">Icons</string>
+
+    <string name="sort_name_short">Name</string>
+    <string name="sort_recent_short">Recent</string>
+    <string name="sort_count_short">Count</string>
+    <string name="sort_recommended_short">Recommended</string>
+    <string name="sort_recent_full">Recently used</string>
+    <string name="sort_count_full">Launch count</string>
+    <string name="usage_sort_note">Recently used, launch count, and Recommended are derived from on-device usage history. Multiple apps sharing the same package share the same statistics</string>
+
+    <string name="content_desc_more_options">More options</string>
+    <string name="tag_edit_start">Edit tags</string>
+    <string name="tag_edit_stop">Stop editing tags</string>
+    <string name="multi_select_on">Multi-select</string>
+    <string name="multi_select_off">Turn off multi-select</string>
+    <string name="tag_management_open">Manage tags</string>
+    <string name="tag_management_close">Close tag management</string>
+    <string name="usage_access_settings">Usage Access settings</string>
+    <string name="backup_export_menu">Export backup</string>
+    <string name="backup_import_menu">Restore backup</string>
+    <string name="privacy_policy_menu">Privacy policy</string>
+
+    <string name="tag_management_exit_button">Done managing tags</string>
+    <string name="tag_section_title">Tags</string>
+    <string name="new_tag_name_hint">New tag name</string>
+    <string name="add_tag_button">Add tag</string>
+    <string name="add_to_home_label">Add to Home screen</string>
+    <string name="add_untagged_shortcut_button">Add Untagged</string>
+    <string name="untagged_label_hint">Display name (leave blank for \"Untagged\")</string>
+    <string name="action_save">Save</string>
+    <string name="untagged_pinned_label">Untagged (pinned first)</string>
+    <string name="display_label_format">Shown as: %1$s</string>
+    <string name="action_rename">Change</string>
+    <string name="no_tags">No tags yet</string>
+    <string name="tag_name_hint">Tag name</string>
+    <string name="tag_display_label_hint">Display name (leave blank to show the tag name)</string>
+    <string name="content_desc_move_up">Move up</string>
+    <string name="content_desc_move_down">Move down</string>
+    <string name="pin_tag_to_home_button">Home</string>
+    <string name="action_delete">Delete</string>
+    <string name="tag_colon_label">Tags:</string>
+    <string name="untagged_label">Untagged</string>
+    <string name="filter_clear_button">Clear</string>
+    <string name="tag_panel_title_format">Tags for %1$s</string>
+    <string name="action_undo">Undo</string>
+    <string name="action_redo">Redo</string>
+    <string name="action_close">Close</string>
+    <string name="tag_button_label">Tag</string>
+
+    <string name="bulk_bar_no_tags_format">Bulk: %1$d items (create tags in Tag management)</string>
+    <string name="bulk_bar_count_format">Bulk: %1$d items</string>
+    <string name="bulk_assign_button">Assign</string>
+    <string name="bulk_remove_button">Remove</string>
+    <string name="bulk_clear_button">Clear</string>
+    <string name="tag_chip_format">#%1$s</string>
+
+    <string name="apps_load_failed">Failed to load the app list</string>
+    <string name="launch_failed_format">Failed to launch: %1$s (%2$s)</string>
+
+    <string name="tag_name_required">Enter a tag name</string>
+    <string name="tag_name_duplicate">A tag with that name already exists</string>
+    <string name="tag_create_failed">Failed to create tag</string>
+    <string name="tag_update_failed">Failed to update tag</string>
+    <string name="tag_edit_undone">Undid the tag change</string>
+    <string name="tag_undo_failed">Could not undo</string>
+    <string name="tag_edit_redone">Redid the tag change</string>
+    <string name="tag_redo_failed">Could not redo</string>
+    <string name="bulk_assign_success_format">Bulk-assigned to %1$d items</string>
+    <string name="bulk_assign_failed">Failed to bulk-assign</string>
+    <string name="bulk_remove_success_format">Bulk-removed from %1$d items</string>
+    <string name="bulk_remove_failed">Failed to bulk-remove</string>
+    <string name="tag_rename_failed">Failed to edit tag</string>
+    <string name="tag_reorder_failed">Failed to reorder</string>
+
+    <string name="privacy_policy_text">"Pixel Tag Drawer Privacy Policy\nLast updated: %1$s\nApplies to: Pixel Tag Drawer (com.iwadjp.pixeltagdrawer)\n\nOverview\nPixel Tag Drawer does not send personal or sensitive information to any external server. All processing happens on the device.\n\nInformation the app accesses\n• The list of launchable apps on the device (app names, package names, etc.): used to display, tag, and filter apps. It is obtained via an ACTION_MAIN / CATEGORY_LAUNCHER query, not the QUERY_ALL_PACKAGES permission that would target every app on the device.\n• App usage (optional): to provide the \"Recently used\", \"Launch count\", and \"Recommended\" sort orders, the app aggregates Android UsageStats (last 30 days) and UsageEvents (last 7 days) on the device, but only if access is granted. This permission is granted or revoked manually in Android Settings; the normal runtime permission dialog is not shown. If access is not granted, these sort orders fall back to name order, and every other feature remains available.\n• Tags you create, tag assignments, and display settings: stored in an on-device database.\n\nWhat the app does not do\n• It does not request the INTERNET permission and contains no code that connects to an external server.\n• It does not include ads, analytics, crash reporting, or telemetry features or SDKs.\n• It does not require creating an account or signing in.\n• It does not access location, camera, microphone, or contacts.\n\nWhen data can leave the device\nThe app itself never sends your data anywhere. Only through your own actions can data leave the device, through either of these two paths:\n• Exporting a backup: writes a file containing your tags, assignments, and settings to the destination you choose in Android\'s standard file picker.\n• Copying diagnostic information: the in-app diagnostics view is copied to the clipboard only when you tap \"Copy\". It may include app names or package names, so review the contents before sharing.\n\nAbout Android system backup\nIf system backup (Auto Backup) is enabled in your device\'s Android settings, local data from this app, including your tags and assignments, may be included in your device backup to your own Google account. This is a mechanism provided by Android/Google, not something this app sends on its own; it is handled under Google\'s privacy policy.\n\nData retention and deletion\nAll data is stored only on the device. You can remove it by deleting tags within the app, clearing the app\'s storage in Android Settings, or uninstalling the app.\n\nAge\nThis app is not designed for children.\n\nChanges\nIf this policy changes in a material way, the \"Last updated\" date at the top of this document will be updated to reflect that.\n\nContact\n%2$s"</string>
+</resources>

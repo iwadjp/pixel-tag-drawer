@@ -64,8 +64,8 @@ HOMEランチャーとしては動作せず、通常のアプリとしてPixel L
 
 GitHubのReleaseからAPKをsideloadする形式で配布しています。Google Playでの配布ではありません。
 
-1. [v0.1.2 リリース](https://github.com/iwadjp/pixel-tag-drawer/releases/tag/v0.1.2) を開く
-2. Assetsから`pixel-tag-drawer-v0.1.2-android.apk`をダウンロードする
+1. [v0.1.3 リリース](https://github.com/iwadjp/pixel-tag-drawer/releases/tag/v0.1.3) を開く
+2. Assetsから`pixel-tag-drawer-v0.1.3-android.apk`をダウンロードする
 3. ダウンロードしたAPKをタップしてインストールする
 
 Androidでは、このソースからのアプリインストールを許可するよう求められる場合があります。また Google Play Protect や Android が、Google Play 外で配布された APK に対して警告を表示することがあります。インストールを進める前に、ダウンロードしたAPKが上記の公式GitHub Releaseから取得したものであることを確認してください。

@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.iwadjp.pixeltagdrawer.PerfLog
+import com.iwadjp.pixeltagdrawer.R
 import com.iwadjp.pixeltagdrawer.data.AppPreferences
 import com.iwadjp.pixeltagdrawer.data.TagRepository
 import com.iwadjp.pixeltagdrawer.data.db.TagEntity
@@ -25,6 +26,10 @@ class TagViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository = TagRepository(application)
     private val prefs = AppPreferences(application)
+
+    /** ViewModelはComposableではないため、stringResourceではなくContext.getStringで解決する。 */
+    private fun string(resId: Int, vararg args: Any): String =
+        getApplication<Application>().getString(resId, *args)
 
     // 前回の絞り込み選択を復元する。削除済みIDは observeTags の intersect で除外される。
     private val _uiState = MutableStateFlow(buildInitialFilterState())
@@ -107,13 +112,13 @@ class TagViewModel(application: Application) : AndroidViewModel(application) {
                 _uiState.update {
                     when {
                         tagId >= 0 -> it.copy(tagName = "", message = null)
-                        name.trim().isEmpty() -> it.copy(message = "タグ名を入力してください")
-                        else -> it.copy(message = "同名のタグが既にあります")
+                        name.trim().isEmpty() -> it.copy(message = string(R.string.tag_name_required))
+                        else -> it.copy(message = string(R.string.tag_name_duplicate))
                     }
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "タグ作成に失敗しました", e)
-                _uiState.update { it.copy(message = "タグの作成に失敗しました") }
+                _uiState.update { it.copy(message = string(R.string.tag_create_failed)) }
             }
         }
     }
@@ -154,7 +159,7 @@ class TagViewModel(application: Application) : AndroidViewModel(application) {
                 refreshUndoRedoFlags(message = null)
             } catch (e: Exception) {
                 Log.w(TAG, "タグ割り当ての更新に失敗しました", e)
-                _uiState.update { it.copy(message = "タグの更新に失敗しました") }
+                _uiState.update { it.copy(message = string(R.string.tag_update_failed)) }
             }
         }
     }
@@ -168,10 +173,10 @@ class TagViewModel(application: Application) : AndroidViewModel(application) {
                 applyTagEdit(action.packageName, action.className, action.tagId, assign = !action.assigned)
                 undoStack.removeLast()
                 redoStack.addLast(action)
-                refreshUndoRedoFlags(message = "タグ操作を元に戻しました")
+                refreshUndoRedoFlags(message = string(R.string.tag_edit_undone))
             } catch (e: Exception) {
                 Log.w(TAG, "Undo に失敗しました", e)
-                _uiState.update { it.copy(message = "元に戻せませんでした") }
+                _uiState.update { it.copy(message = string(R.string.tag_undo_failed)) }
             }
         }
     }
@@ -184,10 +189,10 @@ class TagViewModel(application: Application) : AndroidViewModel(application) {
                 applyTagEdit(action.packageName, action.className, action.tagId, assign = action.assigned)
                 redoStack.removeLast()
                 undoStack.addLast(action)
-                refreshUndoRedoFlags(message = "タグ操作をやり直しました")
+                refreshUndoRedoFlags(message = string(R.string.tag_edit_redone))
             } catch (e: Exception) {
                 Log.w(TAG, "Redo に失敗しました", e)
-                _uiState.update { it.copy(message = "やり直せませんでした") }
+                _uiState.update { it.copy(message = string(R.string.tag_redo_failed)) }
             }
         }
     }
@@ -203,10 +208,10 @@ class TagViewModel(application: Application) : AndroidViewModel(application) {
                 targets.forEach { (packageName, className) ->
                     repository.assignTag(packageName, className, tagId)
                 }
-                _uiState.update { it.copy(message = "${targets.size}件に一括付与しました") }
+                _uiState.update { it.copy(message = string(R.string.bulk_assign_success_format, targets.size)) }
             } catch (e: Exception) {
                 Log.w(TAG, "一括付与に失敗しました", e)
-                _uiState.update { it.copy(message = "一括付与に失敗しました") }
+                _uiState.update { it.copy(message = string(R.string.bulk_assign_failed)) }
             }
         }
     }
@@ -222,10 +227,10 @@ class TagViewModel(application: Application) : AndroidViewModel(application) {
                 targets.forEach { (packageName, className) ->
                     repository.removeTag(packageName, className, tagId)
                 }
-                _uiState.update { it.copy(message = "${targets.size}件から一括解除しました") }
+                _uiState.update { it.copy(message = string(R.string.bulk_remove_success_format, targets.size)) }
             } catch (e: Exception) {
                 Log.w(TAG, "一括解除に失敗しました", e)
-                _uiState.update { it.copy(message = "一括解除に失敗しました") }
+                _uiState.update { it.copy(message = string(R.string.bulk_remove_failed)) }
             }
         }
     }
@@ -447,7 +452,7 @@ class TagViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             try {
                 if (name.trim().isEmpty()) {
-                    _uiState.update { it.copy(message = "タグ名を入力してください") }
+                    _uiState.update { it.copy(message = string(R.string.tag_name_required)) }
                     return@launch
                 }
                 val rows = repository.renameTag(tag.tagId, name)
@@ -458,12 +463,12 @@ class TagViewModel(application: Application) : AndroidViewModel(application) {
                     if (rows > 0) {
                         it.copy(editingTag = null, editingTagName = "", editingTagDisplayLabel = "", message = null)
                     } else {
-                        it.copy(message = "同名のタグが既にあります")
+                        it.copy(message = string(R.string.tag_name_duplicate))
                     }
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "タグの編集に失敗しました", e)
-                _uiState.update { it.copy(message = "タグの編集に失敗しました") }
+                _uiState.update { it.copy(message = string(R.string.tag_rename_failed)) }
             }
         }
     }
@@ -488,7 +493,7 @@ class TagViewModel(application: Application) : AndroidViewModel(application) {
                 repository.swapSortOrder(tags[index], neighbor)
             } catch (e: Exception) {
                 Log.w(TAG, "タグの並び替えに失敗しました", e)
-                _uiState.update { it.copy(message = "並び替えに失敗しました") }
+                _uiState.update { it.copy(message = string(R.string.tag_reorder_failed)) }
             }
         }
     }

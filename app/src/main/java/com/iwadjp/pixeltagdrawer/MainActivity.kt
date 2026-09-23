@@ -96,6 +96,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
@@ -264,7 +265,13 @@ private fun requestPinUntaggedShortcut(context: Context): Boolean {
         putExtra(MainActivity.EXTRA_SHOW_UNTAGGED_ONLY, true)
         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
     }
-    return requestPin(context, id = "untagged", label = "タグなし", iconText = "無", intent = intent)
+    return requestPin(
+        context,
+        id = "untagged",
+        label = context.getString(R.string.untagged_label),
+        iconText = "無",
+        intent = intent,
+    )
 }
 
 /**
@@ -355,6 +362,24 @@ fun AppListScreen(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val prefs = remember(context) { AppPreferences(context) }
+
+    // onClick / coroutine / semantics{} など composition 外 (非Composable) で参照する文言は、
+    // ここで stringResource() により解決しておく (LocalContextGetResourceValueCall lint 対応)。
+    // 可変引数を埋め込むテンプレートは、テンプレート文字列自体をここで解決し、使用箇所で
+    // String.format する (context.getString(id, args) を非Composable文脈で直接呼ばない)。
+    val backupExportSuccessText = stringResource(R.string.backup_export_success)
+    val backupExportFailedText = stringResource(R.string.backup_export_failed)
+    val backupReadFailedText = stringResource(R.string.backup_read_failed)
+    val backupRestoreSuccessText = stringResource(R.string.backup_restore_success)
+    val backupInvalidText = stringResource(R.string.backup_invalid)
+    val backupUnsupportedFormatText = stringResource(R.string.backup_unsupported_format)
+    val backupRestoreFailedText = stringResource(R.string.backup_restore_failed)
+    val pinTagRequestedTemplate = stringResource(R.string.pin_tag_requested)
+    val pinAddFailedText = stringResource(R.string.pin_add_failed)
+    val pinUntaggedRequestedText = stringResource(R.string.pin_untagged_requested)
+    val contentDescPreviousTag = stringResource(R.string.content_desc_previous_tag)
+    val contentDescNextTag = stringResource(R.string.content_desc_next_tag)
+    val contentDescMoreOptions = stringResource(R.string.content_desc_more_options)
     DisposableEffect(lifecycleOwner, viewModel) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
@@ -385,10 +410,10 @@ fun AppListScreen(
                 context.contentResolver.openOutputStream(uri)?.use { out ->
                     out.write(json.toByteArray(Charsets.UTF_8))
                 }
-                "バックアップを書き出しました"
+                backupExportSuccessText
             } catch (e: Exception) {
                 Log.w("Backup", "バックアップの書き出しに失敗しました", e)
-                "バックアップの書き出しに失敗しました"
+                backupExportFailedText
             }
         }
     }
@@ -566,12 +591,15 @@ fun AppListScreen(
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.weight(1f),
             )
-            // 起動計測の診断。通常/簡素表示のどちらでも参照できるよう常時表示する。
-            TextButton(onClick = {
-                diagnosticsReport = PerfLog.report()
-                showDiagnostics = true
-            }) {
-                Text("診断")
+            // 起動計測の診断。開発用のデバッグ表示のため、リリースビルドでは表示しない。
+            // 通常/簡素表示のどちらでも参照できるよう、デバッグビルドでは常時表示する。
+            if (BuildConfig.DEBUG) {
+                TextButton(onClick = {
+                    diagnosticsReport = PerfLog.report()
+                    showDiagnostics = true
+                }) {
+                    Text("診断")
+                }
             }
             // 「編集」「一覧に戻る」の表示条件は3モードに基づき一意に決める。
             // 通常モード: どちらも出さない / 簡素: 編集のみ / 編集: 一覧に戻るのみ。
@@ -581,7 +609,7 @@ fun AppListScreen(
                         uiMode = ShortcutUiMode.Editing
                         PerfLog.log("[LM] button=Edit -> uiMode=Editing (reason=edit clicked)")
                     }) {
-                        Text("編集")
+                        Text(stringResource(R.string.edit_button))
                     }
                 }
                 ShortcutUiMode.Editing -> {
@@ -612,7 +640,7 @@ fun AppListScreen(
                                 "restore launch filter=${formatLaunchFilter(launchFilter)} (reason=list return clicked)",
                         )
                     }) {
-                        Text("一覧に戻る")
+                        Text(stringResource(R.string.back_to_list_button))
                     }
                     // タグ管理はタイトル行には置かない。通常起動と同じく一覧上部の ⋯ メニューから開く
                     // (編集モードは simplified=false のため ⋯ メニューが表示される)。
@@ -645,12 +673,9 @@ fun AppListScreen(
                     showImportConfirm = false
                     pendingImportUri = null
                 },
-                title = { Text("バックアップから復元しますか？") },
+                title = { Text(stringResource(R.string.restore_backup_title)) },
                 text = {
-                    Text(
-                        "現在のタグ・アプリの割り当て・関連する設定が、選択したバックアップの内容で置き換わります。" +
-                            "使用状況アクセスの許可やホーム画面のショートカットは対象外のため、必要なら復元後に再設定してください。",
-                    )
+                    Text(stringResource(R.string.restore_backup_body))
                 },
                 confirmButton = {
                     TextButton(onClick = {
@@ -664,23 +689,22 @@ fun AppListScreen(
                                         input.readBytes().toString(Charsets.UTF_8)
                                     }
                                     when {
-                                        text == null -> "バックアップの読み込みに失敗しました"
+                                        text == null -> backupReadFailedText
                                         else -> when (backupRepository.importJson(text)) {
-                                            BackupImportOutcome.Success ->
-                                                "復元が完了しました。反映のためアプリを再起動してください"
-                                            BackupImportOutcome.InvalidBackup -> "無効なバックアップファイルです"
-                                            BackupImportOutcome.UnsupportedFormat -> "対応していない形式です"
-                                            BackupImportOutcome.RestoreFailure -> "復元に失敗しました"
+                                            BackupImportOutcome.Success -> backupRestoreSuccessText
+                                            BackupImportOutcome.InvalidBackup -> backupInvalidText
+                                            BackupImportOutcome.UnsupportedFormat -> backupUnsupportedFormatText
+                                            BackupImportOutcome.RestoreFailure -> backupRestoreFailedText
                                         }
                                     }
                                 } catch (e: Exception) {
                                     Log.w("Backup", "バックアップの読み込みに失敗しました", e)
-                                    "バックアップの読み込みに失敗しました"
+                                    backupReadFailedText
                                 }
                             }
                         }
                     }) {
-                        Text("続行")
+                        Text(stringResource(R.string.action_continue))
                     }
                 },
                 dismissButton = {
@@ -688,7 +712,7 @@ fun AppListScreen(
                         showImportConfirm = false
                         pendingImportUri = null
                     }) {
-                        Text("キャンセル")
+                        Text(stringResource(R.string.action_cancel))
                     }
                 },
             )
@@ -700,7 +724,7 @@ fun AppListScreen(
                 onDismissRequest = { backupResultMessage = null },
                 confirmButton = {
                     TextButton(onClick = { backupResultMessage = null }) {
-                        Text("OK")
+                        Text(stringResource(R.string.action_ok))
                     }
                 },
                 text = { Text(msg) },
@@ -729,17 +753,17 @@ fun AppListScreen(
                 onPinTag = { tag ->
                     val ok = requestPinTagShortcut(context, tag.tagId, tag.name)
                     shortcutMessage = if (ok) {
-                        "「${tag.name}」のホーム追加をリクエストしました"
+                        String.format(pinTagRequestedTemplate, tag.name)
                     } else {
-                        "ホーム画面への追加に失敗しました"
+                        pinAddFailedText
                     }
                 },
                 onPinUntagged = {
                     val ok = requestPinUntaggedShortcut(context)
                     shortcutMessage = if (ok) {
-                        "「タグなし」のホーム追加をリクエストしました"
+                        pinUntaggedRequestedText
                     } else {
-                        "ホーム画面への追加に失敗しました"
+                        pinAddFailedText
                     }
                 },
                 onStartEditUntagged = tagViewModel::startEditUntaggedLabel,
@@ -796,7 +820,7 @@ fun AppListScreen(
                         onClick = { selectAdjacentTag(-1) },
                         modifier = Modifier
                             .size(36.dp)
-                            .semantics { contentDescription = "前のタグ" },
+                            .semantics { contentDescription = contentDescPreviousTag },
                     ) {
                         Text("◀", style = MaterialTheme.typography.labelLarge)
                     }
@@ -804,7 +828,7 @@ fun AppListScreen(
                         onClick = { selectAdjacentTag(+1) },
                         modifier = Modifier
                             .size(36.dp)
-                            .semantics { contentDescription = "次のタグ" },
+                            .semantics { contentDescription = contentDescNextTag },
                     ) {
                         Text("▶", style = MaterialTheme.typography.labelLarge)
                     }
@@ -813,7 +837,7 @@ fun AppListScreen(
                     value = uiState.query,
                     onValueChange = viewModel::updateQuery,
                     singleLine = true,
-                    label = { Text("アプリ名 / パッケージ名で検索") },
+                    label = { Text(stringResource(R.string.search_hint)) },
                     // 入力があるときだけ、一発クリアできるボタンを出す
                     trailingIcon = if (uiState.query.isNotEmpty()) {
                         {
@@ -1029,7 +1053,7 @@ fun AppListScreen(
         when {
             uiState.isLoading && uiState.apps.isEmpty() -> {
                 Text(
-                    text = "アプリ一覧を読み込んでいます...",
+                    text = stringResource(R.string.loading_apps),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 16.dp),
@@ -1038,7 +1062,7 @@ fun AppListScreen(
 
             uiState.apps.isEmpty() -> {
                 Text(
-                    text = "起動可能なアプリが見つかりませんでした",
+                    text = stringResource(R.string.no_launchable_apps),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 16.dp),
@@ -1049,7 +1073,7 @@ fun AppListScreen(
             // 数百ms後に並び替わる二段階表示を避ける。VM 側のタイムアウトで必ず解除される。
             uiState.initialSortSettling -> {
                 Text(
-                    text = "アプリ一覧を読み込んでいます...",
+                    text = stringResource(R.string.loading_apps),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 16.dp),
@@ -1058,7 +1082,7 @@ fun AppListScreen(
 
             sortedApps.isEmpty() -> {
                 Text(
-                    text = "一致するアプリがありません",
+                    text = stringResource(R.string.no_matching_apps),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 16.dp),
@@ -1076,7 +1100,7 @@ fun AppListScreen(
                     horizontalArrangement = Arrangement.Start,
                 ) {
                     Text(
-                        text = "${sortedApps.size} 件",
+                        text = stringResource(R.string.app_count_format, sortedApps.size),
                         style = MaterialTheme.typography.labelMedium,
                     )
                     Spacer(modifier = Modifier.width(12.dp))
@@ -1090,18 +1114,18 @@ fun AppListScreen(
                         FilterChip(
                             selected = displayMode == AppDisplayMode.List,
                             onClick = { displayMode = AppDisplayMode.List },
-                            label = { Text("リスト") },
+                            label = { Text(stringResource(R.string.display_mode_list)) },
                         )
                         FilterChip(
                             selected = displayMode == AppDisplayMode.Grid,
                             onClick = { displayMode = AppDisplayMode.Grid },
-                            label = { Text("アイコン") },
+                            label = { Text(stringResource(R.string.display_mode_grid)) },
                         )
                         val sortLabel = when (effectiveSortMode) {
-                            AppSortMode.Name -> "名前順"
-                            AppSortMode.Recent -> "最近"
-                            AppSortMode.Count -> "回数"
-                            AppSortMode.Recommended -> "おすすめ"
+                            AppSortMode.Name -> stringResource(R.string.sort_name_short)
+                            AppSortMode.Recent -> stringResource(R.string.sort_recent_short)
+                            AppSortMode.Count -> stringResource(R.string.sort_count_short)
+                            AppSortMode.Recommended -> stringResource(R.string.sort_recommended_short)
                         }
                         Box(modifier = Modifier.weight(1f)) {
                             TextButton(onClick = { sortMenuExpanded = true }) {
@@ -1119,14 +1143,14 @@ fun AppListScreen(
                                 onDismissRequest = { sortMenuExpanded = false },
                             ) {
                                 DropdownMenuItem(
-                                    text = { Text("名前順") },
+                                    text = { Text(stringResource(R.string.sort_name_short)) },
                                     onClick = {
                                         sortMenuExpanded = false
                                         viewModel.setSortMode(AppSortMode.Name, persist = persistSort)
                                     },
                                 )
                                 DropdownMenuItem(
-                                    text = { Text("最近起動") },
+                                    text = { Text(stringResource(R.string.sort_recent_full)) },
                                     enabled = uiState.usageStatsAccessGranted,
                                     onClick = {
                                         sortMenuExpanded = false
@@ -1134,7 +1158,7 @@ fun AppListScreen(
                                     },
                                 )
                                 DropdownMenuItem(
-                                    text = { Text("起動回数") },
+                                    text = { Text(stringResource(R.string.sort_count_full)) },
                                     enabled = uiState.usageStatsAccessGranted,
                                     onClick = {
                                         sortMenuExpanded = false
@@ -1142,7 +1166,7 @@ fun AppListScreen(
                                     },
                                 )
                                 DropdownMenuItem(
-                                    text = { Text("おすすめ") },
+                                    text = { Text(stringResource(R.string.sort_recommended_short)) },
                                     enabled = uiState.usageStatsAccessGranted,
                                     onClick = {
                                         sortMenuExpanded = false
@@ -1152,7 +1176,7 @@ fun AppListScreen(
                                 DropdownMenuItem(
                                     text = {
                                         Text(
-                                            text = "最近起動・起動回数・おすすめは端末の使用履歴に基づきます。同じパッケージの複数アプリは同じ統計を共有します",
+                                            text = stringResource(R.string.usage_sort_note),
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
@@ -1171,7 +1195,7 @@ fun AppListScreen(
                                 onClick = { appListMenuExpanded = true },
                                 modifier = Modifier
                                     .size(36.dp)
-                                    .semantics { contentDescription = "その他" },
+                                    .semantics { contentDescription = contentDescMoreOptions },
                             ) {
                                 TopActionOverflowDots()
                             }
@@ -1180,7 +1204,13 @@ fun AppListScreen(
                                 onDismissRequest = { appListMenuExpanded = false },
                             ) {
                                 DropdownMenuItem(
-                                    text = { Text(if (tagEditMode) "タグ編集を終了" else "タグ編集") },
+                                    text = {
+                                        Text(
+                                            stringResource(
+                                                if (tagEditMode) R.string.tag_edit_stop else R.string.tag_edit_start,
+                                            ),
+                                        )
+                                    },
                                     onClick = {
                                         appListMenuExpanded = false
                                         tagEditMode = !tagEditMode
@@ -1193,7 +1223,15 @@ fun AppListScreen(
                                 )
                                 DropdownMenuItem(
                                     text = {
-                                        Text(if (tagState.multiSelectFilter) "複数選択をオフ" else "複数選択")
+                                        Text(
+                                            stringResource(
+                                                if (tagState.multiSelectFilter) {
+                                                    R.string.multi_select_off
+                                                } else {
+                                                    R.string.multi_select_on
+                                                },
+                                            ),
+                                        )
                                     },
                                     onClick = {
                                         appListMenuExpanded = false
@@ -1201,7 +1239,17 @@ fun AppListScreen(
                                     },
                                 )
                                 DropdownMenuItem(
-                                    text = { Text(if (showTagManagement) "タグ管理を閉じる" else "タグ管理") },
+                                    text = {
+                                        Text(
+                                            stringResource(
+                                                if (showTagManagement) {
+                                                    R.string.tag_management_close
+                                                } else {
+                                                    R.string.tag_management_open
+                                                },
+                                            ),
+                                        )
+                                    },
                                     onClick = {
                                         appListMenuExpanded = false
                                         showTagManagement = !showTagManagement
@@ -1209,7 +1257,7 @@ fun AppListScreen(
                                 )
                                 if (!uiState.usageStatsAccessGranted) {
                                     DropdownMenuItem(
-                                        text = { Text("使用状況アクセス設定") },
+                                        text = { Text(stringResource(R.string.usage_access_settings)) },
                                         onClick = {
                                             appListMenuExpanded = false
                                             PerfLog.log("[USAGE] usage access settings opened")
@@ -1218,7 +1266,7 @@ fun AppListScreen(
                                     )
                                 }
                                 DropdownMenuItem(
-                                    text = { Text("バックアップを書き出す") },
+                                    text = { Text(stringResource(R.string.backup_export_menu)) },
                                     onClick = {
                                         appListMenuExpanded = false
                                         val stamp = java.time.LocalDate.now().toString()
@@ -1226,14 +1274,14 @@ fun AppListScreen(
                                     },
                                 )
                                 DropdownMenuItem(
-                                    text = { Text("バックアップを復元") },
+                                    text = { Text(stringResource(R.string.backup_import_menu)) },
                                     onClick = {
                                         appListMenuExpanded = false
                                         importBackupLauncher.launch(arrayOf("application/json", "*/*"))
                                     },
                                 )
                                 DropdownMenuItem(
-                                    text = { Text("プライバシーポリシー") },
+                                    text = { Text(stringResource(R.string.privacy_policy_menu)) },
                                     onClick = {
                                         appListMenuExpanded = false
                                         showPrivacyPolicy = true
@@ -1242,7 +1290,7 @@ fun AppListScreen(
                                 DropdownMenuItem(
                                     text = {
                                         Text(
-                                            text = "最近起動・起動回数・おすすめは端末の使用履歴に基づきます。同じパッケージの複数アプリは同じ統計を共有します",
+                                            text = stringResource(R.string.usage_sort_note),
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
@@ -1399,7 +1447,7 @@ internal fun TagManagementExitBar(onExit: () -> Unit, modifier: Modifier = Modif
             horizontalArrangement = Arrangement.Center,
         ) {
             Button(onClick = onExit) {
-                Text("タグ管理を終了")
+                Text(stringResource(R.string.tag_management_exit_button))
             }
         }
     }
@@ -1427,6 +1475,10 @@ internal fun TagSection(
     onConfirmUntaggedLabel: () -> Unit,
     onCancelEditUntaggedLabel: () -> Unit,
 ) {
+    // semantics{} (非Composable) から参照する文言は、ここで stringResource() により解決しておく
+    // (LocalContextGetResourceValueCall lint 対応)。
+    val contentDescMoveUp = stringResource(R.string.content_desc_move_up)
+    val contentDescMoveDown = stringResource(R.string.content_desc_move_down)
     // ヘッダー (タグ追加欄・ホーム追加行・一時メッセージ等) を非スクロールで固定し、
     // タグ一覧だけを weight+verticalScroll で囲む案も検討したが、ヘッダー自体の実高さが
     // 呼び出し元の heightIn(max=...) を超える組み合わせ (メッセージ表示中の小さい画面など) で
@@ -1443,7 +1495,7 @@ internal fun TagSection(
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Text(
-            text = "タグ",
+            text = stringResource(R.string.tag_section_title),
             style = MaterialTheme.typography.titleSmall,
         )
         Row(
@@ -1455,11 +1507,11 @@ internal fun TagSection(
                 value = state.tagName,
                 onValueChange = onNameChange,
                 singleLine = true,
-                label = { Text("新しいタグ名") },
+                label = { Text(stringResource(R.string.new_tag_name_hint)) },
                 modifier = Modifier.weight(1f),
             )
             Button(onClick = onCreate) {
-                Text("タグ追加")
+                Text(stringResource(R.string.add_tag_button))
             }
         }
         state.message?.let { msg ->
@@ -1476,12 +1528,12 @@ internal fun TagSection(
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Text(
-                text = "ホーム画面に追加",
+                text = stringResource(R.string.add_to_home_label),
                 style = MaterialTheme.typography.labelMedium,
                 modifier = Modifier.weight(1f),
             )
             TextButton(onClick = onPinUntagged) {
-                Text("タグなしを追加")
+                Text(stringResource(R.string.add_untagged_shortcut_button))
             }
         }
         shortcutMessage?.let { msg ->
@@ -1502,7 +1554,7 @@ internal fun TagSection(
                     value = state.editingUntaggedLabel,
                     onValueChange = onEditingUntaggedLabelChange,
                     singleLine = true,
-                    label = { Text("表示名 (空欄なら「タグなし」)") },
+                    label = { Text(stringResource(R.string.untagged_label_hint)) },
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Row(
@@ -1510,10 +1562,10 @@ internal fun TagSection(
                     horizontalArrangement = Arrangement.End,
                 ) {
                     TextButton(onClick = onConfirmUntaggedLabel) {
-                        Text("保存")
+                        Text(stringResource(R.string.action_save))
                     }
                     TextButton(onClick = onCancelEditUntaggedLabel) {
-                        Text("キャンセル")
+                        Text(stringResource(R.string.action_cancel))
                     }
                 }
             }
@@ -1525,25 +1577,25 @@ internal fun TagSection(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "タグなし (先頭固定)",
+                        text = stringResource(R.string.untagged_pinned_label),
                         style = MaterialTheme.typography.bodyMedium,
                     )
                     state.untaggedDisplayLabel?.takeIf { it.isNotBlank() }?.let { label ->
                         Text(
-                            text = "表示: $label",
+                            text = stringResource(R.string.display_label_format, label),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }
                 TextButton(onClick = onStartEditUntagged) {
-                    Text("変更")
+                    Text(stringResource(R.string.action_rename))
                 }
             }
         }
         if (state.tags.isEmpty()) {
             Text(
-                text = "タグがありません",
+                text = stringResource(R.string.no_tags),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -1565,14 +1617,14 @@ internal fun TagSection(
                             value = state.editingTagName,
                             onValueChange = onEditingNameChange,
                             singleLine = true,
-                            label = { Text("タグ名") },
+                            label = { Text(stringResource(R.string.tag_name_hint)) },
                             modifier = Modifier.fillMaxWidth(),
                         )
                         OutlinedTextField(
                             value = state.editingTagDisplayLabel,
                             onValueChange = onEditingDisplayLabelChange,
                             singleLine = true,
-                            label = { Text("表示名 (空欄ならタグ名を表示)") },
+                            label = { Text(stringResource(R.string.tag_display_label_hint)) },
                             modifier = Modifier.fillMaxWidth(),
                         )
                         Row(
@@ -1580,10 +1632,10 @@ internal fun TagSection(
                             horizontalArrangement = Arrangement.End,
                         ) {
                             TextButton(onClick = onConfirmRename) {
-                                Text("保存")
+                                Text(stringResource(R.string.action_save))
                             }
                             TextButton(onClick = onCancelRename) {
-                                Text("キャンセル")
+                                Text(stringResource(R.string.action_cancel))
                             }
                         }
                     }
@@ -1601,7 +1653,7 @@ internal fun TagSection(
                             // 表示名が設定されているタグだけ、チップでの見え方を補助表示する
                             tag.displayLabel?.takeIf { it.isNotBlank() }?.let { label ->
                                 Text(
-                                    text = "表示: $label",
+                                    text = stringResource(R.string.display_label_format, label),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -1613,7 +1665,7 @@ internal fun TagSection(
                             enabled = index > 0,
                             modifier = Modifier
                                 .size(32.dp)
-                                .semantics { contentDescription = "上へ移動" },
+                                .semantics { contentDescription = contentDescMoveUp },
                         ) {
                             Text("▲", style = MaterialTheme.typography.labelLarge)
                         }
@@ -1622,19 +1674,19 @@ internal fun TagSection(
                             enabled = index < state.tags.lastIndex,
                             modifier = Modifier
                                 .size(32.dp)
-                                .semantics { contentDescription = "下へ移動" },
+                                .semantics { contentDescription = contentDescMoveDown },
                         ) {
                             Text("▼", style = MaterialTheme.typography.labelLarge)
                         }
                         // 控えめなテキストボタン。誤操作を避けるため小さめに留める
                         TextButton(onClick = { onPinTag(tag) }) {
-                            Text("ホーム")
+                            Text(stringResource(R.string.pin_tag_to_home_button))
                         }
                         TextButton(onClick = { onStartRename(tag) }) {
-                            Text("変更")
+                            Text(stringResource(R.string.action_rename))
                         }
                         TextButton(onClick = { onDelete(tag) }) {
-                            Text("削除")
+                            Text(stringResource(R.string.action_delete))
                         }
                     }
                 }
@@ -1783,7 +1835,7 @@ private fun TagFilterSection(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text(
-                text = "タグ:",
+                text = stringResource(R.string.tag_colon_label),
                 style = MaterialTheme.typography.labelMedium,
             )
             // 先頭に「タグなし」(未付与アプリのみ)。通常タグとは排他。
@@ -1791,7 +1843,12 @@ private fun TagFilterSection(
             FilterChip(
                 selected = state.showUntaggedOnly,
                 onClick = onToggleUntagged,
-                label = { Text(state.untaggedDisplayLabel?.takeIf { it.isNotBlank() } ?: "タグなし") },
+                label = {
+                    Text(
+                        state.untaggedDisplayLabel?.takeIf { it.isNotBlank() }
+                            ?: stringResource(R.string.untagged_label),
+                    )
+                },
             )
             state.tags.forEach { tag ->
                 FilterChip(
@@ -1808,7 +1865,7 @@ private fun TagFilterSection(
             // いずれかの絞り込みが効いている時だけ、まとめて解除できるようにする
             if (state.selectedFilterTagIds.isNotEmpty() || state.showUntaggedOnly) {
                 TextButton(onClick = onClear) {
-                    Text("解除")
+                    Text(stringResource(R.string.filter_clear_button))
                 }
             }
         }
@@ -1907,7 +1964,7 @@ private fun BulkTagBar(
         if (tags.isEmpty()) {
             // タグ未作成時は1行のみ。作成導線はタグ管理に委ねる
             Text(
-                text = "一括: $selectedCount 件 (タグ管理でタグを作成)",
+                text = stringResource(R.string.bulk_bar_no_tags_format, selectedCount),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -1919,7 +1976,7 @@ private fun BulkTagBar(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Text(
-                    text = "一括: $selectedCount 件",
+                    text = stringResource(R.string.bulk_bar_count_format, selectedCount),
                     style = MaterialTheme.typography.labelMedium,
                 )
                 Row(
@@ -1946,10 +2003,18 @@ private fun BulkTagBar(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                CompactBulkAction(text = "付与", enabled = canApply, onClick = onAssign)
-                CompactBulkAction(text = "解除", enabled = canApply, onClick = onRemove)
                 CompactBulkAction(
-                    text = "クリア",
+                    text = stringResource(R.string.bulk_assign_button),
+                    enabled = canApply,
+                    onClick = onAssign,
+                )
+                CompactBulkAction(
+                    text = stringResource(R.string.bulk_remove_button),
+                    enabled = canApply,
+                    onClick = onRemove,
+                )
+                CompactBulkAction(
+                    text = stringResource(R.string.bulk_clear_button),
                     enabled = selectedCount > 0,
                     onClick = onClearSelection,
                 )
@@ -2029,7 +2094,7 @@ private fun AppGridCell(
                 onClick = onTag,
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 0.dp),
             ) {
-                Text(text = "タグ", style = MaterialTheme.typography.labelSmall)
+                Text(text = stringResource(R.string.tag_button_label), style = MaterialTheme.typography.labelSmall)
             }
         }
     }
@@ -2084,7 +2149,7 @@ private fun AppRow(
         // タグ編集モード時だけ、行タップ(起動)とは別のタグ導線を出す
         if (showTagButton) {
             TextButton(onClick = onTag) {
-                Text("タグ")
+                Text(stringResource(R.string.tag_button_label))
             }
         }
     }
@@ -2111,19 +2176,19 @@ private fun SelectedAppTagPanel(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             Text(
-                text = "「${app.label}」のタグ",
+                text = stringResource(R.string.tag_panel_title_format, app.label),
                 style = MaterialTheme.typography.titleSmall,
                 modifier = Modifier.weight(1f),
             )
             // タグ付与/解除に限定した Undo/Redo。可否に応じて有効化する
             TextButton(onClick = onUndo, enabled = state.canUndo) {
-                Text("元に戻す")
+                Text(stringResource(R.string.action_undo))
             }
             TextButton(onClick = onRedo, enabled = state.canRedo) {
-                Text("やり直す")
+                Text(stringResource(R.string.action_redo))
             }
             TextButton(onClick = onClose) {
-                Text("閉じる")
+                Text(stringResource(R.string.action_close))
             }
         }
         // Undo/Redo の結果など短いメッセージを表示する
@@ -2136,7 +2201,7 @@ private fun SelectedAppTagPanel(
         }
         if (state.tags.isEmpty()) {
             Text(
-                text = "タグがありません",
+                text = stringResource(R.string.no_tags),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -2155,7 +2220,7 @@ private fun SelectedAppTagPanel(
                         onCheckedChange = { onToggle(tag.tagId, it) },
                     )
                     Text(
-                        text = "# ${tag.name}",
+                        text = stringResource(R.string.tag_chip_format, tag.name),
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 }

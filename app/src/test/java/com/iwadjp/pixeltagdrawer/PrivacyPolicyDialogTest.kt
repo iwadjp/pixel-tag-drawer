@@ -24,9 +24,14 @@ import org.robolectric.annotation.Config
  * 実際のAlertDialog経路 (Activity/ViewModel全体ではなく、ダイアログ単体) で、
  * 導線を開くと本文が表示され、主要な事実 (INTERNET権限なし・第三者SDKなし) が
  * 含まれ、閉じる操作で戻れることを検証する。
+ *
+ * F-Droidレビューで「英語端末でも日本語UIが表示される」と指摘されたため、
+ * 文言はロケール別の strings.xml (values=英語既定 / values-ja=日本語) から解決する。
+ * qualifiers="en" では英語表示、
+ * qualifiers="ja" では従来どおり日本語表示になることをそれぞれ検証する。
  */
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34])
+@Config(sdk = [34], qualifiers = "en")
 class PrivacyPolicyDialogTest {
 
     @get:Rule
@@ -44,26 +49,60 @@ class PrivacyPolicyDialogTest {
     }
 
     @Test
-    fun dialogShowsTitleAndKeyPrivacyFacts() {
+    fun dialogShowsTitleAndKeyPrivacyFacts_defaultLocaleIsEnglish() {
         setDismissableContent()
 
-        composeRule.onNodeWithText("プライバシーポリシー").assertIsDisplayed()
+        composeRule.onNodeWithText("Privacy policy").assertIsDisplayed()
 
         // 本文はスクロール可能な Column 内の1つの Text ノードにまとまっているため、
         // 部分一致 (substring) で主要な事実の文言が含まれることを確認する。
+        composeRule.onNodeWithText("does not request the INTERNET permission", substring = true)
+            .assertIsDisplayed()
+        composeRule.onNodeWithText("analytics, crash reporting, or telemetry", substring = true)
+            .assertIsDisplayed()
+        composeRule.onNodeWithText(PRIVACY_POLICY_EFFECTIVE_DATE, substring = true).assertIsDisplayed()
+    }
+
+    @Test
+    fun closeButtonDismissesDialog_defaultLocaleIsEnglish() {
+        setDismissableContent()
+
+        composeRule.onNodeWithText("Privacy policy").assertIsDisplayed()
+        composeRule.onNodeWithText("Close").performClick()
+
+        // ダイアログが閉じた後は本文 (タイトル) が composition から消える。
+        composeRule.onAllNodesWithText("Privacy policy").assertCountEquals(0)
+    }
+
+    @Config(sdk = [34], qualifiers = "ja")
+    @Test
+    fun dialogShowsTitleAndKeyPrivacyFacts_japaneseLocale() {
+        setDismissableContent()
+
+        composeRule.onNodeWithText("プライバシーポリシー").assertIsDisplayed()
         composeRule.onNodeWithText("INTERNET権限を要求せず", substring = true).assertIsDisplayed()
         composeRule.onNodeWithText("SDKは組み込んでいません", substring = true).assertIsDisplayed()
         composeRule.onNodeWithText(PRIVACY_POLICY_EFFECTIVE_DATE, substring = true).assertIsDisplayed()
     }
 
+    @Config(sdk = [34], qualifiers = "ja")
     @Test
-    fun closeButtonDismissesDialog() {
+    fun closeButtonDismissesDialog_japaneseLocale() {
         setDismissableContent()
 
         composeRule.onNodeWithText("プライバシーポリシー").assertIsDisplayed()
         composeRule.onNodeWithText("閉じる").performClick()
 
-        // ダイアログが閉じた後は本文 (タイトル) が composition から消える。
         composeRule.onAllNodesWithText("プライバシーポリシー").assertCountEquals(0)
+    }
+
+    @Config(sdk = [34], qualifiers = "fr")
+    @Test
+    fun unsupportedLocaleFallsBackToEnglish() {
+        setDismissableContent()
+
+        // フランス語のような未対応言語では、Android標準のリソース解決により
+        // 既定 (values=英語) にフォールバックすることを確認する。
+        composeRule.onNodeWithText("Privacy policy").assertIsDisplayed()
     }
 }

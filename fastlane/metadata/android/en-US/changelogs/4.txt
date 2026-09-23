@@ -1,0 +1,6 @@
+Adds English and Japanese UI localization.
+
+- English is now the default UI language, with Japanese translations when the
+  device language is Japanese.
+- Release builds no longer show the developer diagnostics button.
+- Adds regression coverage for localized resource resolution.

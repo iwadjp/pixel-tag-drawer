@@ -4,6 +4,16 @@ pixel-tag-drawer の公開用進捗ログ。実機確認やマイルストーン
 
 ---
 
+## 2026-09-23 v0.1.3 多言語化・公開準備
+
+- **変更**: 英語を既定UI、端末言語が日本語の場合は日本語UIとし、Releaseビルドでは開発用診断ボタンを非表示にした。
+- **バージョン**: `versionName 0.1.3` / `versionCode 4`
+- **テスト**: 多言語化の回帰テストを追加。testDebugUnitTest、Debug/Releaseビルド、lint、APK署名検証を実行して公開可否を判定する。
+- **実機確認**: 英語・日本語とも今回の公開前実機確認は未実施。実施できない項目は最終報告で未検証とする。
+- **公開範囲**: GitHubのmaster、`v0.1.3` tag、署名済みAPK付きRelease。F-Droid MR !47198 へのpush・metadata変更・コメント返信は行わない。
+
+---
+
 ## 2026-06-28 起動可能アプリ一覧の実機確認
 
 - **対象コミット**: `4fdb7da List launchable apps`

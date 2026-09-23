@@ -10,6 +10,8 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.unit.dp
+import androidx.test.core.app.ApplicationProvider
+import com.iwadjp.pixeltagdrawer.R
 import com.iwadjp.pixeltagdrawer.TagManagementExitBar
 import com.iwadjp.pixeltagdrawer.TagSection
 import com.iwadjp.pixeltagdrawer.data.db.TagEntity
@@ -43,6 +45,12 @@ class TagManagementLayoutTest {
 
     private fun tags(count: Int): List<TagEntity> =
         (1..count).map { TagEntity(tagId = it.toLong(), name = "タグ$it", sortOrder = it) }
+
+    // 表示文言はロケール別リソースへ抽出済みのため、テストのデフォルトロケール (en) で
+    // 実際に解決される文言をリソース経由で取得し、ハードコードした日本語と比較しない。
+    private fun exitBarLabel(): String =
+        ApplicationProvider.getApplicationContext<android.content.Context>()
+            .getString(R.string.tag_management_exit_button)
 
     // heightIn(max=...) で潰されたケースを再現するため、実際の呼び出し元 (AppListScreen) と
     // 同様に高さを制約したコンテナへ乗せる (無制約な Box に置くとバグを再現できない)。
@@ -132,8 +140,8 @@ class TagManagementLayoutTest {
             TagManagementExitBar(onExit = { exited = true })
         }
 
-        composeRule.onNodeWithText("タグ管理を終了").assertIsDisplayed().assertHasClickAction()
-        composeRule.onNodeWithText("タグ管理を終了").performClick()
+        composeRule.onNodeWithText(exitBarLabel()).assertIsDisplayed().assertHasClickAction()
+        composeRule.onNodeWithText(exitBarLabel()).performClick()
 
         assert(exited) { "onExit was not invoked by clicking the exit bar" }
     }
@@ -171,7 +179,7 @@ class TagManagementLayoutTest {
             }
         }
 
-        composeRule.onNodeWithText("タグ管理を終了").assertIsDisplayed().performClick()
+        composeRule.onNodeWithText(exitBarLabel()).assertIsDisplayed().performClick()
         assert(exited) { "exit bar was not reachable/clickable while the tag panel was tall" }
     }
 }
