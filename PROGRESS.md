@@ -4,6 +4,24 @@ pixel-tag-drawer の公開用進捗ログ。実機確認やマイルストーン
 
 ---
 
+## 2026-09-23 F-Droid登録申請MR !47198 マージ
+
+- **MR**: [fdroid/fdroiddata!47198「New App: Pixel Tag Drawer」](https://gitlab.com/fdroid/fdroiddata/-/merge_requests/47198)（Application ID `com.iwadjp.pixeltagdrawer`）
+- **状態**: Merged（マージ先 `fdroid/fdroiddata` の `master`）
+- **マージ日時**: 2026-09-23 14:15:48 UTC（2026-09-23 23:15:48 JST）、マージ担当 linsui
+- **squash commit**: `b62588d9a5b1488d7933916e7c549644e6718611`
+- **判断**: F-Droid公式リポジトリへの新規アプリ登録申請の段階は完了した。
+- **未確認**: F-Droid側のビルド完了、公式ストアへの掲載、F-Droidからのインストール可否はいずれも未確認。MRのマージは配布開始を意味しない。
+- **Play trigger**: 2026-09-01のHuman decisionはF-Droidの**listing成功**をtriggerとしているため、MRマージの時点ではPlay stateは **WAIT_FOR_FDROID** のまま。
+
+### 次の確認事項
+
+- F-Droid側のビルド完了
+- F-Droid公式ストア（f-droid.org）への掲載
+- F-Droidクライアントからのインストール可否
+
+---
+
 ## 2026-09-23 v0.1.3 実機確認（英語・日本語UI切り替え）
 
 - **配布経路**: SafeDrop経由でGitHub Release v0.1.3のAPK（versionCode 4）を実機へ取得・インストール。
