@@ -1,0 +1,1 @@
+Fixed an issue where deleting a tag could leave a stale active filter and make the app list appear empty.
