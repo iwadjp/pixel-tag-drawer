@@ -35,6 +35,12 @@ class TagViewModel(application: Application) : AndroidViewModel(application) {
     private val _uiState = MutableStateFlow(buildInitialFilterState())
     val uiState: StateFlow<TagUiState> = _uiState.asStateFlow()
 
+    // null means Room has not emitted yet; an empty set means there are no tags.
+    private var availableTagIds: Set<Long>? = null
+
+    private fun existingFilterTagIds(ids: Set<Long>): Set<Long> =
+        availableTagIds?.let { ids.intersect(it) } ?: ids
+
     /**
      * 復元時の初期フィルタ状態。単一選択モードで複数IDが保存されていたら先頭1つに単一化し、
      * UI破綻を防ぐ (単一化した場合は保存も更新する)。
@@ -71,6 +77,11 @@ class TagViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 // タグが削除されても絞り込み選択が宙に浮かないよう、存在するIDだけ残す
                 val validIds = tags.mapTo(mutableSetOf()) { it.tagId }
+                availableTagIds = validIds
+                // Prune saved manual filters separately from transient shortcut filters.
+                val savedIds = prefs.loadFilterTagIds()
+                val remainingIds = savedIds.intersect(validIds)
+                if (remainingIds != savedIds) prefs.saveFilterTagIds(remainingIds)
                 _uiState.update {
                     it.copy(
                         tags = tags,
@@ -336,11 +347,13 @@ class TagViewModel(application: Application) : AndroidViewModel(application) {
     /**
      * ショートカット起動指定の単一タグで絞り込む (ショートカット由来・非永続)。
      * 通常モードの手動フィルタ prefs は上書きしない (通常アイコン再起動で手動フィルタを失わないため)。
-     * 存在しない tagId は observeTags の intersect で除外され、フィルタなしに戻る (クラッシュしない)。
+     * 読込済みなら存在しないIDを即時除外する。未読込なら observeTags で除外する。
      */
     fun applyShortcutFilterTag(tagId: Long) {
         PerfLog.log("VM applyShortcutFilterTag tagId=$tagId (transient)")
-        _uiState.update { it.copy(selectedFilterTagIds = setOf(tagId), showUntaggedOnly = false) }
+        _uiState.update {
+            it.copy(selectedFilterTagIds = existingFilterTagIds(setOf(tagId)), showUntaggedOnly = false)
+        }
     }
 
     /** ショートカット起動指定で「タグなし」絞り込みを適用する (ショートカット由来・非永続)。 */
@@ -356,7 +369,7 @@ class TagViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun restoreManualFilters() {
         val multi = prefs.multiSelectFilter
-        val saved = prefs.loadFilterTagIds()
+        val saved = existingFilterTagIds(prefs.loadFilterTagIds())
         val ids = if (!multi && saved.size > 1) setOf(saved.first()) else saved
         PerfLog.log("VM restoreManualFilters tags=${ids.size} untagged=${prefs.showUntaggedOnly}")
         _uiState.update {
