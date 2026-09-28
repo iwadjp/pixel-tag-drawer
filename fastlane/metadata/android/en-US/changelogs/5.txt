@@ -1,2 +1,3 @@
 Fixed an issue where deleting a tag could leave a stale active filter and make the app list appear empty.
 Bulk tag assignment no longer keeps references to a tag that was deleted before applying the change.
+Bulk tag assignment is now atomic, so interruption cannot leave only part of the selected apps tagged.
