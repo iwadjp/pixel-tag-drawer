@@ -216,9 +216,7 @@ class TagViewModel(application: Application) : AndroidViewModel(application) {
         if (targets.isEmpty()) return
         viewModelScope.launch {
             try {
-                targets.forEach { (packageName, className) ->
-                    repository.assignTag(packageName, className, tagId)
-                }
+                repository.assignTagToApps(targets, tagId)
                 _uiState.update { it.copy(message = string(R.string.bulk_assign_success_format, targets.size)) }
             } catch (e: Exception) {
                 Log.w(TAG, "一括付与に失敗しました", e)

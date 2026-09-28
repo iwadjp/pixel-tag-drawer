@@ -16,6 +16,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.viewModelScope
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.iwadjp.pixeltagdrawer.AppListScreen
@@ -24,6 +25,7 @@ import com.iwadjp.pixeltagdrawer.data.AppPreferences
 import com.iwadjp.pixeltagdrawer.data.TagRepository
 import com.iwadjp.pixeltagdrawer.data.db.PixelTagDrawerDatabase
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.cancel
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Before
@@ -184,6 +186,49 @@ class DeletedBulkTagTest {
         composeRule.waitUntil(5_000) { tags.uiState.value.appTagMap.isNotEmpty() }
         restart(1)
         assertEquals(tags.uiState.value.tags.single().tagId, runBlocking { db.appTagDao().getAllOnce().single().tagId })
+    }
+
+    @Test
+    fun interruptedBulkAssignmentDoesNotPersistPartialSelectionAfterRestart() {
+        selectBulkTarget()
+        composeRule.runOnIdle {
+            tags.startRenameTag(tags.uiState.value.tags.first { it.tagId == work })
+            tags.updateEditingTagName("Renamed")
+            tags.confirmRenameTag()
+        }
+        composeRule.waitUntil(5_000) { tags.uiState.value.tags.any { it.name == "Renamed" } }
+        val interrupted = java.util.concurrent.atomic.AtomicBoolean(false)
+        // Cancel at the second target: the same lifecycle cancellation used when
+        // a ViewModel is cleared, deterministically after the first insert.
+        val targets = object : AbstractList<Pair<String, String>>() {
+            override val size = 2
+            override fun get(index: Int): Pair<String, String> {
+                if (index == 1) {
+                    tags.viewModelScope.cancel()
+                    interrupted.set(true)
+                }
+                return "com.example.app$index" to "com.example.app$index.Main"
+            }
+        }
+        composeRule.runOnIdle { tags.bulkAssignTag(targets, work) }
+        composeRule.waitUntil(5_000) { interrupted.get() }
+        composeRule.waitForIdle()
+        assertEquals("Bulk assignment must roll back on lifecycle cancellation",
+            emptyList<Any>(), runBlocking { db.appTagDao().getAllOnce() })
+        restart(2)
+        assertEquals(emptyList<Any>(), runBlocking { db.appTagDao().getAllOnce() })
+        assertEquals(work, tags.uiState.value.tags.first { it.name == "Renamed" }.tagId)
+        selectBulkTargetAfterRename()
+        clickText(R.string.bulk_assign_button)
+        composeRule.waitUntil(5_000) { tags.uiState.value.appTagMap.isNotEmpty() }
+        restart(2)
+        assertEquals(work, runBlocking { db.appTagDao().getAllOnce().single().tagId })
+    }
+
+    private fun selectBulkTargetAfterRename() {
+        menu(R.string.tag_edit_start)
+        composeRule.onNodeWithText("Example app").performClick()
+        composeRule.onAllNodesWithText("Renamed")[1].performClick()
     }
 
     @Test

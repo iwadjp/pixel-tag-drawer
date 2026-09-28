@@ -46,6 +46,24 @@ class TagRepositoryTest {
     }
 
     @Test
+    fun `bulk assignment rejects deleted identity after same name recreation`() = runBlocking {
+        val oldId = repository.createTag("work")
+        repository.deleteTag(db.tagDao().getAllOnce().single())
+        val newId = repository.createTag("work")
+        assertTrue(oldId != newId)
+        val targets = listOf("app.one" to "Main", "app.two" to "Main")
+
+        val stale = runCatching { repository.assignTagToApps(targets, oldId) }
+        assertTrue(stale.exceptionOrNull() is IllegalArgumentException)
+        assertTrue(db.appTagDao().getAllOnce().isEmpty())
+
+        repository.assignTagToApps(targets, newId)
+        val refs = db.appTagDao().getAllOnce()
+        assertEquals(2, refs.size)
+        assertEquals(setOf(newId), refs.map { it.tagId }.toSet())
+    }
+
+    @Test
     fun `deleting a tag also deletes its app_tags assignments`() = runBlocking {
         val tagId = db.tagDao().insert(TagEntity(name = "work", sortOrder = 0))
         val otherTagId = db.tagDao().insert(TagEntity(name = "hobby", sortOrder = 1))

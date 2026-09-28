@@ -6,6 +6,8 @@ import com.iwadjp.pixeltagdrawer.data.db.AppTagCrossRef
 import com.iwadjp.pixeltagdrawer.data.db.PixelTagDrawerDatabase
 import com.iwadjp.pixeltagdrawer.data.db.TagEntity
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 
 /**
  * タグ機能の土台となるRepository。TagDao / AppTagDao を束ねる。
@@ -74,10 +76,18 @@ class TagRepository(private val db: PixelTagDrawerDatabase) {
         tagDao.swapSortOrder(a.tagId, a.sortOrder, b.tagId, b.sortOrder)
 
     /** アプリにタグを付与する。削除後に届いた操作は拒否し、孤児行を作らない。重複は IGNORE。 */
-    suspend fun assignTag(packageName: String, className: String, tagId: Long) = db.withTransaction {
+    suspend fun assignTag(packageName: String, className: String, tagId: Long) =
+        assignTagToApps(listOf(packageName to className), tagId)
+
+    /** Commit the whole selection together, or roll it back on failure/cancellation. */
+    suspend fun assignTagToApps(targets: List<Pair<String, String>>, tagId: Long) = db.withTransaction {
         // Check and insert atomically with respect to deleteTag, including queued UI callbacks.
         require(tagDao.getAllOnce().any { it.tagId == tagId }) { "Tag no longer exists: $tagId" }
-        appTagDao.insert(AppTagCrossRef(packageName, className, tagId))
+        targets.forEach { (packageName, className) ->
+            currentCoroutineContext().ensureActive()
+            appTagDao.insert(AppTagCrossRef(packageName, className, tagId))
+        }
+        currentCoroutineContext().ensureActive()
     }
 
     /** アプリからタグを外す。 */
