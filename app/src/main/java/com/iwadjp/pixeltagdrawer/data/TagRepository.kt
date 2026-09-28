@@ -73,9 +73,12 @@ class TagRepository(private val db: PixelTagDrawerDatabase) {
     suspend fun swapSortOrder(a: TagEntity, b: TagEntity) =
         tagDao.swapSortOrder(a.tagId, a.sortOrder, b.tagId, b.sortOrder)
 
-    /** アプリ (packageName + className) にタグを付与する。重複は IGNORE。 */
-    suspend fun assignTag(packageName: String, className: String, tagId: Long) =
+    /** アプリにタグを付与する。削除後に届いた操作は拒否し、孤児行を作らない。重複は IGNORE。 */
+    suspend fun assignTag(packageName: String, className: String, tagId: Long) = db.withTransaction {
+        // Check and insert atomically with respect to deleteTag, including queued UI callbacks.
+        require(tagDao.getAllOnce().any { it.tagId == tagId }) { "Tag no longer exists: $tagId" }
         appTagDao.insert(AppTagCrossRef(packageName, className, tagId))
+    }
 
     /** アプリからタグを外す。 */
     suspend fun removeTag(packageName: String, className: String, tagId: Long) =

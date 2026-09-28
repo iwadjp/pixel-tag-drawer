@@ -33,6 +33,19 @@ class TagRepositoryTest {
     private val repository = TagRepository(db)
 
     @Test
+    fun `assignment queued after tag deletion is rejected without orphan rows`() = runBlocking {
+        val tagId = repository.createTag("work")
+        repository.deleteTag(db.tagDao().getAllOnce().single())
+
+        val result = runCatching {
+            repository.assignTag("com.example.app", "com.example.app.Main", tagId)
+        }
+
+        assertTrue("Deleted tags must not accept assignments", result.exceptionOrNull() is IllegalArgumentException)
+        assertTrue(db.appTagDao().getAllOnce().isEmpty())
+    }
+
+    @Test
     fun `deleting a tag also deletes its app_tags assignments`() = runBlocking {
         val tagId = db.tagDao().insert(TagEntity(name = "work", sortOrder = 0))
         val otherTagId = db.tagDao().insert(TagEntity(name = "hobby", sortOrder = 1))

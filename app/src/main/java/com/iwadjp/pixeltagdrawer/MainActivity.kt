@@ -452,6 +452,11 @@ fun AppListScreen(
     var selectedBulkApps by remember { mutableStateOf(emptySet<String>()) }
     var bulkTargetTagId by remember { mutableStateOf<Long?>(null) }
 
+    // Tag management can delete the bulk target while edit mode remains open.
+    LaunchedEffect(tagState.tags) {
+        if (tagState.tags.none { it.tagId == bulkTargetTagId }) bulkTargetTagId = null
+    }
+
     // UIモード。通常起動=None、ショートカット起動=Simplified、その編集画面=Editing。
     // 初期値: launchFilter があれば Simplified、無ければ None。以後はモード遷移操作で更新。
     var uiMode by remember {
