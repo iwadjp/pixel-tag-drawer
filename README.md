@@ -1,125 +1,153 @@
 # Pixel Tag Drawer
 
-**Pixel Launcherはそのまま。アプリだけ、自分のタグで整理できます。**
+[English](README.md) | [日本語](README.ja.md)
 
-Pixel Tag Drawerは、Pixel Launcherを置き換えずに使うAndroid向けの補助アプリです。
-端末上の起動可能なアプリを一覧にし、用途に合わせたタグで整理・絞り込みできます。
-HOMEランチャーとしては動作せず、通常のアプリとしてPixel Launcherと併用します。
+**Keep Pixel Launcher as it is. Just organize your apps with your own tags.**
 
-ビルド設定上のminSdkは26（Android 8.0）です。現在はPixel 10aで開発・動作確認しています。
-ほかの端末やランチャーでの動作は未検証であり、正常な動作を保証するものではありません。
+Pixel Tag Drawer is a companion app for Android that works alongside Pixel Launcher instead of replacing it.
+It lists the launchable apps on your device and lets you organize and filter them with tags that fit how you use them.
+It does not act as a home launcher; you use it as a normal app next to Pixel Launcher.
 
-## スクリーンショット
+The app UI is **English by default**. If the device language is Japanese, the app shows its Japanese UI instead.
+The screenshots below show the English UI.
+
+The build's minSdk is 26 (Android 8.0). It is currently developed and tested on a Pixel 10a.
+Behavior on other devices or launchers has not been verified and is not guaranteed.
+
+## Screenshots
 
 <table>
   <tr>
     <td align="center">
-      <strong>全アプリ表示</strong><br>
-      <sub>すべての起動可能アプリをグリッド表示</sub><br>
-      <img src="docs/images/all-apps.png" alt="全アプリのグリッド表示" width="240">
+      <strong>All apps</strong><br>
+      <sub>Every launchable app in a grid</sub><br>
+      <img src="docs/images/all-apps.png" alt="Grid view of all apps" width="240">
     </td>
     <td align="center">
-      <strong>単一タグで絞り込み</strong><br>
-      <sub>Googleタグで対象アプリを絞り込み</sub><br>
-      <img src="docs/images/google-tag.png" alt="Googleタグによる絞り込み" width="240">
+      <strong>Filter by one tag</strong><br>
+      <sub>Narrow the list down with the Google tag</sub><br>
+      <img src="docs/images/google-tag.png" alt="Apps filtered by the Google tag" width="240">
     </td>
   </tr>
   <tr>
     <td align="center">
-      <strong>複数タグのAND絞り込み</strong><br>
-      <sub>MediaとGoogleをAND条件で絞り込み</sub><br>
-      <img src="docs/images/media-google-and-filter.png" alt="MediaとGoogleのAND絞り込み" width="240">
+      <strong>AND filter with multiple tags</strong><br>
+      <sub>Show only apps that have both Google and Media</sub><br>
+      <img src="docs/images/media-google-and-filter.png" alt="AND filter with the Google and Media tags" width="240">
     </td>
     <td align="center">
-      <strong>タグ管理</strong><br>
-      <sub>タグの作成・並べ替え・名前変更・削除</sub><br>
-      <img src="docs/images/tag-management.png" alt="タグ管理画面" width="240">
+      <strong>Tag management</strong><br>
+      <sub>Create, reorder, rename and delete tags</sub><br>
+      <img src="docs/images/tag-management.png" alt="Tag management screen" width="240">
     </td>
   </tr>
 </table>
 
-## 主な特徴
+Japanese-UI screenshots are in [README.ja.md](README.ja.md).
 
-- 起動可能なアプリを「全アプリ」「選択したタグ」「タグなし」で表示
-- 1つのアプリに複数のタグを付与
-- 複数タグをすべて持つアプリだけを表示するAND絞り込み
-- アプリ名・パッケージ名による検索
-- リスト表示とグリッド表示の切り替え
-- 名前順、最近起動した順、起動回数順、おすすめ順への並び替え
-- タグの作成、名前変更、削除と、アプリへの一括付与・解除
-- タグまたは「タグなし」の絞り込みを開くPinned Shortcut
+## Features
 
-## Usage Access（使用状況へのアクセス）
+- Show launchable apps as "all apps", a selected tag, or "untagged"
+- Assign multiple tags to one app
+- AND filter: show only apps that have all of the selected tags
+- Search by app name or package name
+- Switch between list and grid (icon) view
+- Sort by name, most recently launched, launch count, or a usage-based "recommended" order
+- Create, rename and delete tags, and add or remove a tag on many apps at once
+- Pinned shortcuts that open a specific tag filter or the "untagged" filter on your home screen
 
-最近起動した順、起動回数順、おすすめ順では、Androidの`UsageStats`と
-`UsageEvents`を使用します。最近起動した順と起動回数順は過去30日、
-おすすめ順は直近7日の使用状況を端末内で集計します。
+## Supported Android version and languages
 
-これらの並び順を使うには、Androidの設定画面でPixel Tag Drawerに
-「使用状況へのアクセス」を手動で許可する必要があります。通常のランタイム権限ダイアログでは
-許可できません。許可しない場合も、名前順、検索、タグ整理、タグ絞り込みなどは利用でき、
-使用状況が必要な並び順は名前順へフォールバックします。
+- Android 8.0 (API 26) or later (minSdk 26)
+- English (default) and Japanese UI. Japanese is used when the device language is Japanese; otherwise English is shown.
 
-## ダウンロード / インストール
+## Usage Access
 
-GitHubのReleaseからAPKをsideloadする形式で配布しています。Google Playでの配布ではありません。
+The "recently launched", "launch count" and "recommended" sort orders use Android's `UsageStats` and
+`UsageEvents`. "Recently launched" and "launch count" aggregate the last 30 days, and "recommended"
+aggregates the last 7 days, all on the device.
 
-1. [v0.1.4 リリース](https://github.com/iwadjp/pixel-tag-drawer/releases/tag/v0.1.4) を開く
-2. Assetsから`pixel-tag-drawer-v0.1.4-android.apk`をダウンロードする
-3. ダウンロードしたAPKをタップしてインストールする
+To use these sort orders you must grant "usage access" to Pixel Tag Drawer manually in Android settings.
+It cannot be granted through a normal runtime permission dialog. If you do not grant it, name sorting, search,
+tag organization and tag filtering still work, and the usage-based orders fall back to name order.
 
-Androidでは、このソースからのアプリインストールを許可するよう求められる場合があります。また Google Play Protect や Android が、Google Play 外で配布された APK に対して警告を表示することがあります。インストールを進める前に、ダウンロードしたAPKが上記の公式GitHub Releaseから取得したものであることを確認してください。
+## Download / Install
 
-現時点でPixel 10aでのみ動作確認済みです。他の端末やランチャーでの動作は未検証です。
+Pixel Tag Drawer is available from F-Droid, or as an APK you can sideload from GitHub Releases.
+It is not distributed through Google Play.
 
-開発用にソースからビルドしたい場合は、以下の「開発環境」「ビルドと検証」を参照してください。
+### F-Droid
 
-## 開発環境
+- [Pixel Tag Drawer on F-Droid](https://f-droid.org/packages/com.iwadjp.pixeltagdrawer/)
+
+### GitHub Release (APK)
+
+1. Open the [v0.1.4 release](https://github.com/iwadjp/pixel-tag-drawer/releases/tag/v0.1.4)
+2. Download `pixel-tag-drawer-v0.1.4-android.apk` from Assets
+3. Tap the downloaded APK to install it
+
+Android may ask you to allow installing apps from this source. Google Play Protect or Android may also show a
+warning for APKs distributed outside Google Play. Before proceeding, make sure the APK you downloaded came from the
+official GitHub Release above.
+
+It has only been verified on a Pixel 10a so far. Other devices and launchers have not been tested.
+
+To build from source for development, see "Development environment" and "Build and verify" below.
+
+## How to use
+
+1. Open Pixel Tag Drawer. All launchable apps are listed.
+2. Open the "⋯" menu and choose "Manage tags" to create tags (for example "Google", "Media", "Utilities").
+3. Choose "Edit tags" in the "⋯" menu, select apps, pick a tag and tap "Assign" to add the tag to many apps at once.
+4. Tap a tag chip to show only apps with that tag, or "Untagged" to find apps without tags.
+5. Turn on "Multi-select" in the "⋯" menu to select several tag chips and show only apps that have all of them (AND filter).
+6. Use "Add to Home screen" in "Manage tags" to pin a shortcut that opens a specific tag filter.
+
+## Development environment
 
 - JDK 21
 - Android SDK 36
-- Android Studio、またはAndroid SDKを利用できるコマンドライン環境
+- Android Studio, or a command-line environment with the Android SDK
 
-Gradle 9.4.1はGradle Wrapperから取得されます。Android SDKの場所は、
-追跡対象外の`local.properties`または環境変数で設定してください。
+Gradle 9.4.1 is downloaded by the Gradle Wrapper. Set the Android SDK location in the untracked
+`local.properties` or through an environment variable.
 
-## ビルドと検証
+## Build and verify
 
-PowerShellでは、リポジトリのルートで次のコマンドを実行します。
+In PowerShell, run the following from the repository root.
 
 ```powershell
-# Debug APKを作成
+# Build a debug APK
 .\gradlew.bat assembleDebug
 
-# JVM unit testを実行
+# Run JVM unit tests
 .\gradlew.bat testDebugUnitTest
 
-# Android lintを実行
+# Run Android lint
 .\gradlew.bat lintDebug
 ```
 
-macOS/Linuxでは`.\gradlew.bat`を`./gradlew`に読み替えてください。
+On macOS/Linux, replace `.\gradlew.bat` with `./gradlew`.
 
-Debug APKは次の場所に生成されます。
+The debug APK is generated at:
 
 ```text
 app/build/outputs/apk/debug/app-debug.apk
 ```
 
-このAPKは開発用のdebug buildです。端末へインストールするには、Android SDK Platform Toolsの
-`adb`を使うか、端末側で提供元不明アプリのインストールを許可する必要があります。
-既に同じapplication IDのアプリがある場合、署名が異なるAPKでは上書きインストールできません。
+This APK is a development debug build. To install it on a device, use `adb` from the Android SDK Platform Tools,
+or allow installing apps from unknown sources on the device. If an app with the same application ID is already
+installed, an APK signed with a different key cannot overwrite it.
 
-## プライバシー
+## Privacy
 
-起動可能なアプリの情報、作成したタグ、表示設定、許可された場合の使用状況データは、
-現在の実装では端末内で処理されます。アプリは`INTERNET`権限を要求せず、外部サーバーへ
-これらのデータを送信する処理も実装していません。
+In the current implementation, information about launchable apps, the tags you create, display settings and
+(if you grant it) usage data are processed on the device. The app does not request the `INTERNET` permission and
+has no code that sends this data to an external server.
 
-診断ログにはアプリ名やパッケージ名などが含まれる場合があります。ログをコピーして共有する際は、
-内容を確認してください。
+Diagnostic logs may contain app names or package names. Review the content before copying and sharing logs.
 
-アプリ内の「⋯」メニューから、上記の内容を含むプライバシーポリシー本文を確認できます。
+You can read the privacy policy text, which includes the above, from the "⋯" menu inside the app.
 
 ## License
 
