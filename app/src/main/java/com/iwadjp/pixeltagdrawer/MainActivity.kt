@@ -25,6 +25,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -61,6 +62,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
@@ -72,6 +74,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.dynamicLightColorScheme
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -325,14 +329,7 @@ fun PixelTagDrawerApp(
     newIntentSeq: Int = 0,
     initialNormalLauncher: Boolean = false,
 ) {
-    val context = LocalContext.current
-    val colorScheme = if (supportsDynamicColor()) {
-        dynamicLightColorScheme(context)
-    } else {
-        lightColorScheme()
-    }
-
-    MaterialTheme(colorScheme = colorScheme) {
+    MaterialTheme(colorScheme = appColorScheme()) {
         Surface(modifier = Modifier.fillMaxSize()) {
             AppListScreen(
                 launchFilter = launchFilter,
@@ -340,6 +337,17 @@ fun PixelTagDrawerApp(
                 initialNormalLauncher = initialNormalLauncher,
             )
         }
+    }
+}
+
+@Composable
+internal fun appColorScheme(): ColorScheme {
+    val context = LocalContext.current
+    val darkTheme = isSystemInDarkTheme()
+    return if (supportsDynamicColor()) {
+        if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+    } else {
+        if (darkTheme) darkColorScheme() else lightColorScheme()
     }
 }
 

@@ -1,5 +1,5 @@
-﻿<resources>
-    <style name="AppTheme" parent="android:style/Theme.Material.Light.NoActionBar">
+<resources>
+    <style name="AppTheme" parent="android:style/Theme.Material.NoActionBar">
         <item name="android:windowNoTitle">true</item>
         <item name="android:fontFamily">sans</item>
         <item name="android:windowBackground">?android:attr/colorBackground</item>
