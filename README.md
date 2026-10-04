@@ -52,6 +52,7 @@ Japanese-UI screenshots are in [README.ja.md](README.ja.md).
 - AND filter: show only apps that have all of the selected tags
 - Search by app name or package name
 - Switch between list and grid (icon) view
+- Light and dark themes follow your Android system setting
 - Sort by name, most recently launched, launch count, or a usage-based "recommended" order
 - Create, rename and delete tags, and add or remove a tag on many apps at once
 - Pinned shortcuts that open a specific tag filter or the "untagged" filter on your home screen
@@ -82,8 +83,8 @@ It is not distributed through Google Play.
 
 ### GitHub Release (APK)
 
-1. Open the [v0.1.4 release](https://github.com/iwadjp/pixel-tag-drawer/releases/tag/v0.1.4)
-2. Download `pixel-tag-drawer-v0.1.4-android.apk` from Assets
+1. Open the [v0.1.5 release](https://github.com/iwadjp/pixel-tag-drawer/releases/tag/v0.1.5)
+2. Download `pixel-tag-drawer-v0.1.5-android.apk` from Assets
 3. Tap the downloaded APK to install it
 
 Android may ask you to allow installing apps from this source. Google Play Protect or Android may also show a

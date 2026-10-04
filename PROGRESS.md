@@ -4,6 +4,21 @@ pixel-tag-drawer の公開用進捗ログ。実機確認やマイルストーン
 
 ---
 
+## 2026-10-04 v0.1.5 Dark mode 公開前準備
+
+- **状態**: v0.1.5候補のローカル検証・公開準備。外部公開はHuman Gate待ち。現在の公開Releaseはv0.1.4。
+- **変更**: 外部ユーザーのIssue #1での要望を受け、Androidのシステムテーマに追従するDark modeを追加（既存commit `4f422310a7e3bacf215e3ceae5873dadfbf5b3e1`）。lightでstatus bar iconが白背景に埋もれる問題をemulatorと回帰testで確認し、`enableEdgeToEdge()`でsystem barのappearanceもテーマへ追従させた。
+- **バージョン・metadata**: `versionName 0.1.5` / `versionCode 6`。英語・日本語のchangelog `6.txt`、READMEのtheme説明・APK案内を準備。one-handed/navigationの実装予定は追加していない。
+- **automated verification**: 既存中間生成物のないfresh source snapshotで `gradlew --no-daemon testDebugUnitTest lint assembleRelease` を実行し、97件全PASS（failures/errors/skips 0）、lint PASS（error 0、既存warning/hintあり）、Release build PASS。system bar回帰testはAPI 30/35のlight/dark各1件。修正前はlightの2件がFAIL、修正後は4件全PASS。
+- **emulator smoke**: task専用Android API 35 emulatorで署名済みReleaseを起動。英語・日本語 × light/darkのmain、タグ選択・管理、dialog、menu、empty state、Usage Access helper、status/navigation barを確認しPASS。最終v0.1.5 APKへのupgrade installも成功し、version/codeと既存タグの保持を確認。実機・API 36は未検証。error stateは故意に発生させていない。
+- **APK検証**: package `com.iwadjp.pixeltagdrawer`、version `0.1.5` / code `6`、minSdk 26 / targetSdk 36、Release `BuildConfig.DEBUG=false`、zipalign、v2/v3署名を確認。v0.1.4と同じ証明書SHA-256 `3cae2b8c341174c92a91934b4689527f2ac680150644d2d79bc312c71e1894df`。
+- **候補APK SHA-256**: `5B7E82228014975F60B87A0BFB29B8D124A0927D5EF6D9AE3554FE3CF745F1B4`（8,417,155 bytes）。署名済みAPK・unsigned APK・Release本文案は既存private release-stagingの `pixel-tag-drawer/v0.1.5/` に保存。
+- **ローカル再現性**: ソース一致を確認した別fresh snapshotからのunsigned APKがバイト一致。通常zlibのPython 3.13で既存apksigcopierの厳密な署名コピーを実行し、署名コピー後も候補APKとSHA-256まで完全一致、署名検証PASS。ホストPython 3.14/zlib-ngではmetadata圧縮解析に失敗したため検証runtimeだけをscratch内で分離した。依存関係・manifest・DB・署名方式の不要な変更はなく、git revision埋め込み無効も維持。F-Droid側CIは未実行。
+- **証跡**: ローカル `scratchpad/ptd-v015-20261004/` の `candidate-verification.log`、`candidate-artifact-verification.log`、`candidate-repro-build.log`、`candidate-repro-verification.json`、`smoke-results.json`、無加工screenshots。
+- **公開境界**: push、tag、GitHub Release作成、F-Droid変更、Issue #1への通知は未実行。Human Gate通過後に今回のcommitと既存Dark mode commitを公開し、候補APKのdigestを公開downloadから再確認する。Issue通知ではDark modeの追加versionと試用依頼のみを伝え、未実装機能の予定は約束しない。
+
+---
+
 ## 2026-09-23 F-Droid登録申請MR !47198 マージ
 
 - **MR**: [fdroid/fdroiddata!47198「New App: Pixel Tag Drawer」](https://gitlab.com/fdroid/fdroiddata/-/merge_requests/47198)（Application ID `com.iwadjp.pixeltagdrawer`）

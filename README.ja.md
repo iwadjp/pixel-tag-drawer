@@ -49,6 +49,7 @@ HOMEランチャーとしては動作せず、通常のアプリとしてPixel L
 - 複数タグをすべて持つアプリだけを表示するAND絞り込み
 - アプリ名・パッケージ名による検索
 - リスト表示とグリッド表示の切り替え
+- Androidのシステム設定に追従するライト／ダークテーマ
 - 名前順、最近起動した順、起動回数順、おすすめ順への並び替え
 - タグの作成、名前変更、削除と、アプリへの一括付与・解除
 - タグまたは「タグなし」の絞り込みを開くPinned Shortcut
@@ -70,8 +71,8 @@ HOMEランチャーとしては動作せず、通常のアプリとしてPixel L
 
 ### GitHub Release（APK）
 
-1. [v0.1.4 リリース](https://github.com/iwadjp/pixel-tag-drawer/releases/tag/v0.1.4) を開く
-2. Assetsから`pixel-tag-drawer-v0.1.4-android.apk`をダウンロードする
+1. [v0.1.5 リリース](https://github.com/iwadjp/pixel-tag-drawer/releases/tag/v0.1.5) を開く
+2. Assetsから`pixel-tag-drawer-v0.1.5-android.apk`をダウンロードする
 3. ダウンロードしたAPKをタップしてインストールする
 
 Androidでは、このソースからのアプリインストールを許可するよう求められる場合があります。また Google Play Protect や Android が、Google Play 外で配布された APK に対して警告を表示することがあります。インストールを進める前に、ダウンロードしたAPKが上記の公式GitHub Releaseから取得したものであることを確認してください。
