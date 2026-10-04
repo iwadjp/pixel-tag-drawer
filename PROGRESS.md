@@ -4,6 +4,18 @@ pixel-tag-drawer の公開用進捗ログ。実機確認やマイルストーン
 
 ---
 
+## 2026-10-05 v0.1.5 RELEASED — Dark mode
+
+- **公開**: Human Gate承認後、`master`をpushし、annotated tag `v0.1.5`をrelease commit `3d467b1f906086536d3a085f0793746caa12bc56`へ作成・push。正式な[GitHub Release v0.1.5](https://github.com/iwadjp/pixel-tag-drawer/releases/tag/v0.1.5)を公開した。
+- **変更**: System light/darkに追従するDark modeと、status/navigation bar iconの視認性修正。manual theme設定やone-handed/navigation改善は含まない。
+- **公開APK**: `pixel-tag-drawer-v0.1.5-android.apk`（versionName `0.1.5` / versionCode `6`、8,417,155 bytes）。公開assetを再取得し、SHA-256 `5B7E82228014975F60B87A0BFB29B8D124A0927D5EF6D9AE3554FE3CF745F1B4`が承認済み候補と一致することを確認。
+- **feedback loop**: [Issue #1へrelease通知済み](https://github.com/iwadjp/pixel-tag-drawer/issues/1#issuecomment-5983855619)。System theme追従と試用依頼のみを伝え、IssueはOpenのまま維持した。
+- **SafeDrop**: 既存のversion付き配布方式で`pixel-tag-drawer-v015`を追加。正式release APKを配信し、一覧・HTML・実downloadとGitHub assetとのchecksum一致を確認。既存APKは保持した。
+- **F-Droid**: 現在のmetadataは`AutoUpdateMode: Version` / `UpdateCheckMode: Tags`、CurrentVersion `0.1.4` / code `5`。公式package pageもv0.1.4 / code 5まで掲載。v0.1.5 tagは既存自動更新経路の対象だが、v0.1.5の反映・build・配信は未確認。fdroiddataの手動変更はしていない。
+- **follow-up**: F-Droid自動更新・build・掲載の確認、owner実機での通常/shortcut dark launchと判読性確認、ユーザーの試用feedbackを待つ。AI自己改善システムには重複記録を追加しない。
+
+---
+
 ## 2026-10-04 v0.1.5 Dark mode 公開前準備
 
 - **状態**: v0.1.5候補のローカル検証・公開準備。外部公開はHuman Gate待ち。現在の公開Releaseはv0.1.4。
