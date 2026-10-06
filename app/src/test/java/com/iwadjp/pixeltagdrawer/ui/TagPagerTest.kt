@@ -216,7 +216,6 @@ class TagPagerTest {
                                         childClickable: Boolean = true, itemCount: Int = 3) {
         content(grid = grid, itemCount = itemCount, childScrollEnabled = childScrollEnabled,
             childClickable = childClickable)
-        rule.runOnIdle { PagerDiagnostics.clear() }
         rule.mainClock.autoAdvance = false
         rule.onNodeWithTag("pager").performTouchInput {
             down(Offset(320f, 500f) * density)
@@ -235,15 +234,6 @@ class TagPagerTest {
         rule.mainClock.autoAdvance = true; rule.waitForIdle()
         if (childScrollEnabled) assertEquals(20L, selected.value)
         assertEquals(0, clicks)
-        if (com.iwadjp.pixeltagdrawer.BuildConfig.PAGER_DIAGNOSTICS && childScrollEnabled) {
-            val report = PagerDiagnostics.report()
-            assertTrue(report.contains("consumedBeforePagerDrag=true"))
-            assertTrue(report.contains("HORIZONTAL_CLAIM"))
-            assertTrue(report.contains("VERTICAL_HANDOFF"))
-            assertFalse(report.contains("SELECTED_SCROLL_BEGIN"))
-            assertFalse(report.contains("WRAP_SCROLL_BEGIN"))
-            assertFalse(report.contains("RESET_BEGIN"))
-        }
     }
     @Test fun human_horizontal_after_child_consumption_list() { verticalStartHorizontal(false) }
     @Test fun human_horizontal_after_child_consumption_grid() { verticalStartHorizontal(true) }
@@ -281,7 +271,6 @@ class TagPagerTest {
     private fun cancelThenNextDrag(grid: Boolean = false, empty: Boolean = false) {
         content(grid = grid, empty = empty)
         rule.mainClock.autoAdvance = false
-        rule.runOnIdle { PagerDiagnostics.clear() }
         rule.onNodeWithTag("pager").performTouchInput {
             down(Offset(320f, 400f) * density); moveTo(Offset(300f, 400f) * density, 40); cancel()
         }
@@ -292,10 +281,8 @@ class TagPagerTest {
         // The next finger must remain in control despite the previous cancellation.
         assertTrue(pager.isScrollInProgress)
         assertTrue(kotlin.math.abs(pager.currentPageOffsetFraction) > 0.1f)
-        val timeline = PagerDiagnostics.report()
         rule.onNodeWithTag("pager").performTouchInput { up() }
         rule.mainClock.autoAdvance = true; rule.waitForIdle()
-        if (com.iwadjp.pixeltagdrawer.BuildConfig.PAGER_DIAGNOSTICS) println("CANCEL_NEXT_DRAG_TIMELINE\n" + timeline)
         assertEquals(0, clicks); assertEquals(20L, selected.value)
     }
     @Test fun previous_cancel_reset_does_not_preempt_next_drag() { cancelThenNextDrag(empty = true) }
