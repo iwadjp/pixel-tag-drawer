@@ -4,13 +4,26 @@ pixel-tag-drawer の公開用進捗ログ。実機確認やマイルストーン
 
 ---
 
+## 2026-10-06 v0.1.6 published
+
+- Human final RC acceptance: **PASS**, "test ok". Publish the accepted implementation without gesture changes.
+- Release commit/tag: `7f63950ab39c33d21dd667b7951f98ed9aa8dd30` / `v0.1.6`; master and annotated tag pushed. This publication record is a separate documentation commit; the release tag stays on the accepted source commit.
+- Public Release: https://github.com/iwadjp/pixel-tag-drawer/releases/tag/v0.1.6 (stable, latest).
+- Asset: `pixel-tag-drawer-v0.1.6-android.apk`; fresh clean build, package `com.iwadjp.pixeltagdrawer`, version 0.1.6/code 7; existing release certificate `3cae2b8c341174c92a91934b4689527f2ac680150644d2d79bc312c71e1894df`, V2/V3 verified.
+- Public asset SHA-256: `8215454C5B7C8B1465CBC82F304F1CC448FB0C93B63FFC7D15F16B31CE7F6435`. Anonymous download HTTP 200; downloaded bytes/hash/package/version/signature verified. Fresh-build hash differs from the incremental Human RC, with the same source/version/signing identity. Full signature-copy reproduction passes with classic zlib; the local Python zlib-ng checker incompatibility was isolated.
+- Issue #1 reply: https://github.com/iwadjp/pixel-tag-drawer/issues/1#issuecomment-6015099277 ; posted English update about smooth horizontal swipe/one-handed navigation and v0.1.5 dark mode. Issue remains OPEN for feedback.
+- F-Droid metadata read-only: AutoUpdateMode Version / UpdateCheckMode Tags; current metadata 0.1.4/code 5. Tag 0.1.6/code 7, asset filename template and allowed signing key are consistent. No manual metadata/MR changes. F-Droid's detection/build/listing of 0.1.6 is not yet verified.
+- Repair the preceding acceptance entry's text encoding in this documentation-only commit; no production source/version/asset changes.
+
+---
+
 ## 2026-10-06 v0.1.6 smooth swipe Human acceptance / final RC
 
-- HorizontalPager smooth swipe: child vertical scroll consumption??????????? `f7ca058` ?Human???????**acceptance PASS**?
-- Human: ?test ok ?????????????????????????
-- temporary Pager diagnostics removed: menu/copy/reload/clear UI?trace?????build???state/event observation?????????horizontal arbitration?finger-following???fling?cancel job lifecycle??scroll/tap?wrap???/???????????
-- production????137 tests?Pager regression 36 tests?lint?assembleDebug/Release?diff check PASS?production APK?DEX/resources???marker?????????
-- version 0.1.6 / code 7???????release candidate?gesture regression tests???????RC??????Human????push/tag/GitHub Release/Issue??/F-Droid???????
+- HorizontalPager smooth swipe: the child vertical scroll consumption missed-start fix in `f7ca058` passed Human device acceptance.
+- Human: "test ok です。空振りはほぼなく、気持ちよく操作できます。"
+- Temporary Pager diagnostics removed: menu/copy/reload/clear, trace, diagnostic build settings and observation state. Accepted arbitration, finger-following, standard fling, cancellation job lifecycle, vertical scroll/taps, wrap and tag/button synchronization remain unchanged.
+- Production verification: all 137 tests, Pager 36 tests, lint, assembleDebug/Release and diff check PASS. No diagnostic markers in production DEX/resources.
+- Version remains 0.1.6 / code 7. Final signed RC `7f63950` passed Human confirmation: "test ok". Publication follows in the separate record above.
 
 ---
 
