@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material3.Text
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.testTag
@@ -86,18 +87,23 @@ class TagSwipeLogicTest {
 class TagSwipeModifierTest {
     @get:Rule val composeRule = createComposeRule()
     private val swipes = mutableListOf<Int>()
+    private val diagnostics = mutableListOf<SwipeGestureDiagnostic>()
     private var taps = 0
     private lateinit var listState: LazyListState
     private lateinit var gridState: LazyGridState
 
-    private fun setContent(enabled: Boolean, grid: Boolean = false) {
+    private fun setContent(enabled: Boolean, grid: Boolean = false, diagnostic: Boolean = true, plain: Boolean = false) {
         composeRule.setContent {
             listState = rememberLazyListState()
             gridState = rememberLazyGridState()
-            Box(Modifier.fillMaxSize().testTag("area").tagSwipeNavigation(enabled) { swipes += it }) {
+            Box(Modifier.fillMaxSize().testTag("area").tagSwipeNavigation(
+                enabled, diagnostics = diagnostic, onDiagnostic = { diagnostics += it },
+            ) { swipes += it }) {
                 // Production AppRow/AppGridCell are clickable: their DOWN is consumed even
                 // when the eventual gesture is horizontal rather than a tap or vertical drag.
-                if (grid) {
+                if (plain) {
+                    Text("plain clickable content", Modifier.fillMaxSize().clickable { taps++ })
+                } else if (grid) {
                     LazyVerticalGrid(columns = GridCells.Fixed(4), state = gridState, modifier = Modifier.fillMaxSize()) {
                         items((0 until 100).toList()) {
                             Text("cell $it", Modifier.fillMaxWidth().height(64.dp).clickable { taps++ })
@@ -120,6 +126,8 @@ class TagSwipeModifierTest {
         composeRule.onNodeWithTag("area").performTouchInput { swipeRight() }
         assertEquals(listOf(+1, -1), swipes)
         assertEquals(0, taps)
+        assertEquals(listOf("ACCEPT", "ACCEPT"), diagnostics.map { it.result })
+        assertTrue(diagnostics.all { it.enabled && !it.childConsumed && !it.edge })
     }
 
     @Test fun clickable_grid_accepts_horizontal_swipes_without_clicking_cells() {
@@ -135,6 +143,7 @@ class TagSwipeModifierTest {
         composeRule.onNodeWithTag("area").performTouchInput { click() }
         assertEquals(1, taps)
         assertTrue(swipes.isEmpty())
+        assertEquals("REJECT_DISTANCE", diagnostics.single().result)
     }
 
     @Test fun clickable_grid_keeps_taps_without_switching_tag() {
@@ -152,6 +161,8 @@ class TagSwipeModifierTest {
         }
         assertTrue(swipes.isEmpty())
         assertEquals(0, taps)
+        assertEquals("REJECT_CONSUMED", diagnostics.single().result)
+        assertTrue(diagnostics.single().childConsumed)
     }
 
     @Test fun vertical_scroll_does_not_switch_tag() {
@@ -175,6 +186,82 @@ class TagSwipeModifierTest {
     @Test fun disabled_ignores_swipes() {
         setContent(enabled = false)
         composeRule.onNodeWithTag("area").performTouchInput { swipeLeft() }
+        assertTrue(swipes.isEmpty())
+        assertEquals("REJECT_DISABLED", diagnostics.single().result)
+        assertFalse(diagnostics.single().enabled)
+    }
+
+    @Test fun diagnostics_off_preserves_horizontal_swipe_without_recording() {
+        setContent(enabled = true, diagnostic = false)
+        composeRule.onNodeWithTag("area").performTouchInput { swipeLeft() }
+        assertEquals(listOf(+1), swipes)
+        assertEquals(0, taps)
+        assertTrue(diagnostics.isEmpty())
+    }
+
+    @Test fun disabled_diagnostics_off_does_not_record_or_navigate() {
+        setContent(enabled = false, diagnostic = false)
+        composeRule.onNodeWithTag("area").performTouchInput { swipeLeft() }
+        assertTrue(swipes.isEmpty())
+        assertTrue(diagnostics.isEmpty())
+    }
+
+    @Test fun short_gesture_reports_distance_and_measured_displacement() {
+        setContent(enabled = true, plain = true)
+        composeRule.onNodeWithTag("area").performTouchInput {
+            swipe(Offset(width * 0.6f, height * 0.5f), Offset(width * 0.55f, height * 0.5f))
+        }
+        val diagnostic = diagnostics.single()
+        assertEquals("REJECT_DISTANCE", diagnostic.result)
+        assertTrue(diagnostic.dxDp < 0f && kotlin.math.abs(diagnostic.dxDp) < 72f)
+        assertFalse(diagnostic.childConsumed)
+        assertTrue(swipes.isEmpty())
+        assertTrue(diagnostic.line().contains("distance72=false"))
+        assertFalse(diagnostic.line().contains("\n"))
+    }
+
+    @Test fun diagonal_without_child_scroll_reports_ratio_rejection() {
+        setContent(enabled = true, plain = true)
+        composeRule.onNodeWithTag("area").performTouchInput {
+            swipe(Offset(width * 0.8f, height * 0.4f), Offset(width * 0.4f, height * 0.6f))
+        }
+        assertEquals("REJECT_DIRECTION_RATIO", diagnostics.single().result)
+        assertFalse(diagnostics.single().childConsumed)
+        assertTrue(swipes.isEmpty())
+    }
+
+    @Test fun multitouch_is_reported_once_without_navigation() {
+        setContent(enabled = true, plain = true)
+        composeRule.onNodeWithTag("area").performTouchInput {
+            down(0, Offset(width * 0.7f, height * 0.4f))
+            down(1, Offset(width * 0.7f, height * 0.6f))
+            moveTo(0, Offset(width * 0.3f, height * 0.4f))
+            up(0)
+            up(1)
+        }
+        assertEquals("REJECT_MULTITOUCH", diagnostics.single().result)
+        assertTrue(diagnostics.single().multitouch)
+        assertEquals(2, diagnostics.single().maxPointers)
+        assertTrue(swipes.isEmpty())
+    }
+
+    @Test fun disposal_of_an_active_gesture_records_cancellation_once() {
+        val visible = mutableStateOf(true)
+        composeRule.setContent {
+            if (visible.value) {
+                Box(Modifier.fillMaxSize().testTag("area").tagSwipeNavigation(
+                    true, diagnostics = true, onDiagnostic = { diagnostics += it },
+                ) { swipes += it })
+            }
+        }
+        composeRule.onNodeWithTag("area").performTouchInput {
+            down(center)
+            moveBy(Offset(-10f, 0f))
+        }
+        composeRule.runOnIdle { visible.value = false }
+        composeRule.waitForIdle()
+        assertEquals("REJECT_CANCELLED", diagnostics.single().result)
+        assertEquals("CANCELLED", diagnostics.single().termination)
         assertTrue(swipes.isEmpty())
     }
 }

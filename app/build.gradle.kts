@@ -14,6 +14,8 @@ android {
         targetSdk = 36
         versionCode = 6
         versionName = "0.1.5"
+        // Temporary device diagnostics are opt-in; ordinary release builds stay unchanged.
+        buildConfigField("boolean", "SWIPE_DIAGNOSTICS", (providers.gradleProperty("swipeDiagnostics").orNull?.toBoolean() ?: false).toString())
     }
 
     buildTypes {

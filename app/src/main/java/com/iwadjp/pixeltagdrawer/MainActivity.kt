@@ -109,6 +109,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.iwadjp.pixeltagdrawer.ui.adjacentTagId
 import com.iwadjp.pixeltagdrawer.ui.tagSwipeNavigation
+import com.iwadjp.pixeltagdrawer.ui.SwipeDiagnostics
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -608,11 +609,11 @@ fun AppListScreen(
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.weight(1f),
             )
-            // 起動計測の診断。開発用のデバッグ表示のため、リリースビルドでは表示しない。
+            // 通常releaseでは非表示。一時的なswipeDiagnostics APKだけ既存コピー導線を使う。
             // 通常/簡素表示のどちらでも参照できるよう、デバッグビルドでは常時表示する。
-            if (BuildConfig.DEBUG) {
+            if (BuildConfig.DEBUG || BuildConfig.SWIPE_DIAGNOSTICS) {
                 TextButton(onClick = {
-                    diagnosticsReport = PerfLog.report()
+                    diagnosticsReport = if (BuildConfig.SWIPE_DIAGNOSTICS) SwipeDiagnostics.report() else PerfLog.report()
                     showDiagnostics = true
                 }) {
                     Text("診断")
@@ -672,7 +673,7 @@ fun AppListScreen(
         if (showDiagnostics) {
             DiagnosticsDialog(
                 report = diagnosticsReport,
-                onRefresh = { diagnosticsReport = PerfLog.report() },
+                onRefresh = { diagnosticsReport = if (BuildConfig.SWIPE_DIAGNOSTICS) SwipeDiagnostics.report() else PerfLog.report() },
                 onCopy = { clipboard.setText(AnnotatedString(diagnosticsReport)) },
                 onDismiss = { showDiagnostics = false },
             )
@@ -1107,7 +1108,7 @@ fun AppListScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f)
-                        .tagSwipeNavigation(tagSwipeEnabled, selectAdjacentTag),
+                        .tagSwipeNavigation(tagSwipeEnabled, onSwipe = selectAdjacentTag),
                 ) {
                     Text(
                         text = stringResource(R.string.no_matching_apps),
@@ -1371,7 +1372,7 @@ fun AppListScreen(
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .tagSwipeNavigation(tagSwipeEnabled, selectAdjacentTag),
+                        .tagSwipeNavigation(tagSwipeEnabled, onSwipe = selectAdjacentTag),
                 ) {
                 when (displayMode) {
                     AppDisplayMode.List -> {
