@@ -50,6 +50,7 @@ Japanese-UI screenshots are in [README.ja.md](README.ja.md).
 - Show launchable apps as "all apps", a selected tag, or "untagged"
 - Assign multiple tags to one app
 - AND filter: show only apps that have all of the selected tags
+- Switch between tags with a smooth horizontal swipe or the ◀▶ buttons for easier one-handed use
 - Search by app name or package name
 - Switch between list and grid (icon) view
 - Light and dark themes follow your Android system setting
@@ -83,8 +84,8 @@ It is not distributed through Google Play.
 
 ### GitHub Release (APK)
 
-1. Open the [v0.1.5 release](https://github.com/iwadjp/pixel-tag-drawer/releases/tag/v0.1.5)
-2. Download `pixel-tag-drawer-v0.1.5-android.apk` from Assets
+1. Open the [v0.1.6 release](https://github.com/iwadjp/pixel-tag-drawer/releases/tag/v0.1.6)
+2. Download `pixel-tag-drawer-v0.1.6-android.apk` from Assets
 3. Tap the downloaded APK to install it
 
 Android may ask you to allow installing apps from this source. Google Play Protect or Android may also show a
@@ -103,6 +104,14 @@ To build from source for development, see "Development environment" and "Build a
 4. Tap a tag chip to show only apps with that tag, or "Untagged" to find apps without tags.
 5. Turn on "Multi-select" in the "⋯" menu to select several tag chips and show only apps that have all of them (AND filter).
 6. Use "Add to Home screen" in "Manage tags" to pin a shortcut that opens a specific tag filter.
+
+With one tag selected and at least two tags available, swipe left on the app list or grid to move to the next tag,
+or right to move to the previous tag. The page follows your finger while you drag, then settles smoothly when
+you release it; a quick flick also switches tags. A short, slow drag returns to the current tag. Navigation wraps
+from the last tag to the first and back. You can also use the ◀▶ buttons beside the search field.
+
+The app list and grid still scroll vertically, and tapping an app opens it. Tag swipes are unavailable while
+multiple tags are selected, in All apps or Untagged, during Edit tags, or in a simplified shortcut view.
 
 ## Development environment
 
