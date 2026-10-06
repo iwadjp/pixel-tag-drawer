@@ -4,6 +4,18 @@ pixel-tag-drawer の公開用進捗ログ。実機確認やマイルストーン
 
 ---
 
+## 2026-10-06 Pager child-consumption arbitration candidate - Human Gate pending
+
+- Human trace on `a13f024`: enabled, interior horizontal dx=-139.4dp/dy=35dp; child-consumed movement before any Pager drag; no reset/programmatic scroll. Distinct from the separately reproduced CANCEL/reset race.
+- Compose Foundation 1.10.4 source and controlled clickable LazyColumn/Grid tests: early vertical slop starts the child scrollable; consumed motion cancels Pager's horizontal-slop wait; continuous child consumption prevents its pickup loop. Disabling clickable alone still fails; disabling the Lazy scrollable permits finger-following. The old Human trace does not name list vs grid, but both actual hierarchies reproduce the mechanism.
+- Add Initial-pass horizontal direction arbitration (platform touch slop, horizontal/vertical ratio 2); observe consumed history without treating it as failure. Leave vertical motion/taps to children until horizontal claim, then consume movement to cancel child dragging/clicks. Feed public PagerState.scroll(UserInput)/scrollBy during drag and use PagerDefaults.flingBehavior for velocity/smooth snapping; no UP-only threshold navigation. Leave UP unconsumed for Pager's direction observer. Retain accessible page actions.
+- Drag, fling and cancellation recovery share one job; next DOWN cancels the preceding job. Remove queued LaunchedEffect reset and stopScroll(PreventUserInput), which could cancel a newer drag. Wrap mapping/recentering, tag synchronization, buttons, data/settings and version 0.1.6/code 7 remain unchanged.
+- Red/green: isolated `a13f024` source with desired tests fails 11 cases (measured list/grid, scrollable list/grid, clickable-disabled controls, repeated child-first list/grid, CANCEL then next drag in empty/list/grid); both scrollable-disabled controls pass. The fixed implementation passes those cases and existing Pager regression coverage, including following before UP, short-drag return, fling, vertical scroll, taps, edge exclusion, disabled state, buttons and wrap.
+- Verification: full diagnostic 137 tests / Pager 36 tests PASS; diagnostics-off Pager 36 tests also PASS; lint (0 errors), assembleDebug, assembleRelease and diff check PASS.
+- Keep opt-in Pager diagnostics for the next Human APK, including HORIZONTAL_CLAIM / VERTICAL_HANDOFF / FLING / reset job lifecycle. Human must verify ordinary first and continuous swipes, list/grid vertical scrolling/taps and absence of missed starts before release readiness. No push/tag/release/Issue reply.
+
+---
+
 ## 2026-10-06 Pager missed-start diagnosis - Human cause UNKNOWN
 
 - `190a766` Human result: smoothness PASS, usability FAIL (drag starts sometimes produce no visible scrolling). Not accepted for release.
