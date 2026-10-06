@@ -105,7 +105,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.iwadjp.pixeltagdrawer.ui.adjacentTagId
-import com.iwadjp.pixeltagdrawer.ui.tagSwipeNavigation
+import com.iwadjp.pixeltagdrawer.ui.TagPager
+import com.iwadjp.pixeltagdrawer.ui.rememberTagPagerState
+import com.iwadjp.pixeltagdrawer.ui.rememberTagPageScrollStates
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -557,8 +559,14 @@ fun AppListScreen(
     // 一覧の最終要素がナビゲーションバーに隠れないよう、その分を一覧下端の余白に加える。
     // 固定エリアには付けず、スクロール領域 (List/Grid) の contentPadding だけに効かせる。
     val navBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    val listState = rememberLazyListState()
-    val gridState = rememberLazyGridState()
+    val fallbackListState = rememberLazyListState()
+    val fallbackGridState = rememberLazyGridState()
+    val tagPageScrollStates = rememberTagPageScrollStates()
+    val selectedPageId = tagState.selectedFilterTagIds.singleOrNull()
+    val listState = selectedPageId?.let { tagPageScrollStates.list(it) } ?: fallbackListState
+    val gridState = selectedPageId?.let { tagPageScrollStates.grid(it) } ?: fallbackGridState
+    val pagerTagIds = tagState.tags.map { it.tagId }
+    val tagPagerState = rememberTagPagerState(pagerTagIds, selectedPageId)
     var previousScrollSortMode by remember { mutableStateOf<AppSortMode?>(null) }
     var sortMenuExpanded by remember { mutableStateOf(false) }
     var appListMenuExpanded by remember { mutableStateOf(false) }
@@ -785,7 +793,9 @@ fun AppListScreen(
                 currentId = tagState.selectedFilterTagIds.firstOrNull(),
                 delta = delta,
             )
-            if (nextId != null) {
+            if (nextId != null && !tagEditMode) {
+                coroutineScope.launch { tagPagerState.animateScrollToPage(tagPagerState.currentPage + delta) }
+            } else if (nextId != null) {
                 PerfLog.log("[LM] tag nav delta=$delta tagId=$nextId")
                 tagViewModel.selectSingleFilterTag(nextId)
             }
@@ -1072,13 +1082,12 @@ fun AppListScreen(
                 )
             }
 
-            sortedApps.isEmpty() -> {
+            sortedApps.isEmpty() && !tagSwipeEnabled -> {
                 // 該当アプリが0件のタグからもスワイプで抜けられるよう、残り領域全体を対象にする。
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .weight(1f)
-                        .tagSwipeNavigation(tagSwipeEnabled, onSwipe = selectAdjacentTag),
+                        .weight(1f),
                 ) {
                     Text(
                         text = stringResource(R.string.no_matching_apps),
@@ -1339,89 +1348,105 @@ fun AppListScreen(
 
                 // タグ管理パネルは独自の heightIn(max=...) で自己完結して上限を持つため、
                 // ここは以前どおり weight(1f) 単独でよい (weight による比率競合はさせない)。
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .tagSwipeNavigation(tagSwipeEnabled, onSwipe = selectAdjacentTag),
-                ) {
-                when (displayMode) {
-                    AppDisplayMode.List -> {
-                        LazyColumn(
-                            state = listState,
-                            modifier = Modifier.fillMaxSize(),
-                            contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = navBarPadding + 24.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            items(
-                                items = sortedApps,
-                                key = { "${it.packageName}/${it.className}" },
-                            ) { app ->
-                                // このアプリに付与済みのタグ名 (名前順)。未付与なら空。
-                                val tagNames = tagState.appTagMap["${app.packageName}/${app.className}"]
-                                    ?.mapNotNull { tagNameById[it] }
-                                    ?.sorted()
-                                    ?: emptyList()
-                                val key = "${app.packageName}/${app.className}"
-                                AppRow(
-                                    app = app,
-                                    tagNames = tagNames,
-                                    // 個別「タグ」ボタンは廃止 (タグ付けは一括バーへ一本化)
-                                    showTagButton = false,
-                                    selectionMode = tagEditMode,
-                                    selected = selectedBulkApps.contains(key),
-                                    // 編集ON時はタップで一括選択トグル、通常時は起動
-                                    onClick = {
-                                        if (tagEditMode) {
-                                            selectedBulkApps = selectedBulkApps.toMutableSet()
-                                                .apply { if (!add(key)) remove(key) }
-                                        } else {
-                                            PerfLog.log("[LM] app launch clicked")
-                                            viewModel.launch(app)
-                                        }
-                                    },
-                                    onTag = {},
-                                )
-                                HorizontalDivider()
-                            }
+                TagPager(
+                    ids = pagerTagIds, selectedId = selectedPageId,
+                    enabled = tagSwipeEnabled, state = tagPagerState,
+                    onSelect = tagViewModel::selectSingleFilterTag,
+                    modifier = Modifier.weight(1f),
+                ) { pageTagId ->
+                    val pageApps = if (pageTagId == null || pageTagId == selectedPageId) sortedApps else
+                        remember(pageTagId, searchFilteredApps, tagState.appTagMap, effectiveSortMode) {
+                            sortApps(searchFilteredApps.filter { app ->
+                                tagState.appTagMap["${app.packageName}/${app.className}"]?.contains(pageTagId) == true
+                            }, effectiveSortMode)
                         }
-                        ListScrollIndicator(listState)
-                    }
+                    val pageListState = pageTagId?.let { tagPageScrollStates.list(it) } ?: listState
+                    val pageGridState = pageTagId?.let { tagPageScrollStates.grid(it) } ?: gridState
+                    Box(Modifier.fillMaxSize()) {
+                    if (pageApps.isEmpty()) {
+                        Text(stringResource(R.string.no_matching_apps), modifier = Modifier.padding(top = 16.dp),
+                            style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    } else {
+                        when (displayMode) {
+                            AppDisplayMode.List -> {
+                                LazyColumn(
+                                    state = pageListState,
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = navBarPadding + 24.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                                ) {
+                                    items(
+                                        items = pageApps,
+                                        key = { "${it.packageName}/${it.className}" },
+                                    ) { app ->
+                                        // このアプリに付与済みのタグ名 (名前順)。未付与なら空。
+                                        val tagNames = tagState.appTagMap["${app.packageName}/${app.className}"]
+                                            ?.mapNotNull { tagNameById[it] }
+                                            ?.sorted()
+                                            ?: emptyList()
+                                        val key = "${app.packageName}/${app.className}"
+                                        AppRow(
+                                            app = app,
+                                            tagNames = tagNames,
+                                            // 個別「タグ」ボタンは廃止 (タグ付けは一括バーへ一本化)
+                                            showTagButton = false,
+                                            selectionMode = tagEditMode,
+                                            selected = selectedBulkApps.contains(key),
+                                            // 編集ON時はタップで一括選択トグル、通常時は起動
+                                            onClick = {
+                                                if (tagEditMode) {
+                                                    selectedBulkApps = selectedBulkApps.toMutableSet()
+                                                        .apply { if (!add(key)) remove(key) }
+                                                } else {
+                                                    PerfLog.log("[LM] app launch clicked")
+                                                    viewModel.launch(app)
+                                                }
+                                            },
+                                            onTag = {},
+                                        )
+                                        HorizontalDivider()
+                                    }
+                                }
+                                ListScrollIndicator(pageListState)
+                            }
 
-                    AppDisplayMode.Grid -> {
-                        LazyVerticalGrid(
-                            columns = GridCells.Fixed(4),
-                            state = gridState,
-                            modifier = Modifier.fillMaxSize(),
-                            contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = navBarPadding + 24.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            gridItems(
-                                items = sortedApps,
-                                key = { "${it.packageName}/${it.className}" },
-                            ) { app ->
-                                val key = "${app.packageName}/${app.className}"
-                                AppGridCell(
-                                    app = app,
-                                    // 個別「タグ」ボタンは廃止 (タグ付けは一括バーへ一本化)
-                                    showTagButton = false,
-                                    selected = tagEditMode && selectedBulkApps.contains(key),
-                                    onClick = {
-                                        if (tagEditMode) {
-                                            selectedBulkApps = selectedBulkApps.toMutableSet()
-                                                .apply { if (!add(key)) remove(key) }
-                                        } else {
-                                            PerfLog.log("[LM] app launch clicked")
-                                            viewModel.launch(app)
-                                        }
-                                    },
-                                    onTag = {},
-                                )
+                            AppDisplayMode.Grid -> {
+                                LazyVerticalGrid(
+                                    columns = GridCells.Fixed(4),
+                                    state = pageGridState,
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = navBarPadding + 24.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    gridItems(
+                                        items = pageApps,
+                                        key = { "${it.packageName}/${it.className}" },
+                                    ) { app ->
+                                        val key = "${app.packageName}/${app.className}"
+                                        AppGridCell(
+                                            app = app,
+                                            // 個別「タグ」ボタンは廃止 (タグ付けは一括バーへ一本化)
+                                            showTagButton = false,
+                                            selected = tagEditMode && selectedBulkApps.contains(key),
+                                            onClick = {
+                                                if (tagEditMode) {
+                                                    selectedBulkApps = selectedBulkApps.toMutableSet()
+                                                        .apply { if (!add(key)) remove(key) }
+                                                } else {
+                                                    PerfLog.log("[LM] app launch clicked")
+                                                    viewModel.launch(app)
+                                                }
+                                            },
+                                            onTag = {},
+                                        )
+                                    }
+                                }
+                                GridScrollIndicator(pageGridState)
                             }
                         }
-                        GridScrollIndicator(gridState)
                     }
-                }
+                    }
                 }
             }
         }

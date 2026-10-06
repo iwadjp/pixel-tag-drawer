@@ -4,6 +4,21 @@ pixel-tag-drawer の公開用進捗ログ。実機確認やマイルストーン
 
 ---
 
+## 2026-10-06 v0.1.6 smooth swipe candidate - Human Gate pending
+
+- Human requested finger-following page transitions before publication. The earlier recognition-only implementation was accepted; this Pager candidate needs new on-device acceptance.
+- Choose Compose `HorizontalPager`: standard drag/slop, velocity/fling and settling; commit selected tag at rest, render adjacent tags with the same search/tag filtering and sort mode. Previous/next buttons animate the same Pager.
+- Alternatives: independent pointerInput + offset/Animatable would require owning velocity, snapping and cancellation; animated content/visibility does not follow a live drag. Retain only a small Initial-pass system-edge/multitouch guard, not a custom paging engine.
+- Replace recognition-only 72dp / ratio 2 with Pager defaults. Real clickable LazyColumn/Grid measured diagonal horizontal/vertical gestures are regression-tested. No child-consumption history veto.
+- Wrap uses 1,000 repeated tag cycles, modulo tag-ID mapping and invisible recentering at rest near boundaries. Tag-order changes rebuild page mapping around the selected ID; chip selection synchronizes immediately; arrows animate one page.
+- Independent per-tag list/grid positions are saveable. Search, sorting, multi-selection and bulk-edit paths remain; an enabled empty tag keeps the common toolbar/page viewport so transition geometry stays stable.
+- System Back edges are not excluded from Android. The guard prevents in-app horizontal paging from reserved edge starts while retaining taps/vertical movement there. Native cancellation/multitouch returns to the page selected before the gesture.
+- Version remains `0.1.6` / code `7`. No diagnostics UI/build flag, push, tag, release, Issue reply or F-Droid operation.
+- Verification: 24 relevant and 121 full tests PASS (0 failures/errors/skips); lint, assembleDebug, assembleRelease and git diff check PASS. Production DEX has no temporary swipe diagnostics.
+- Human focus: tracking/adjacent-page reveal, settling, fling, vertical scroll, taps, continuous left/right, wrap, arrows, empty tags and Back.
+
+---
+
 ## 2026-10-06 v0.1.6 release preparation - Horizontal tag swipe
 
 - Human accepted `8baf2f4`: horizontal swipes are usable daily, including after child scroll consumption; disabled gestures remain disabled.
