@@ -107,6 +107,8 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.iwadjp.pixeltagdrawer.ui.adjacentTagId
+import com.iwadjp.pixeltagdrawer.ui.tagSwipeNavigation
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -807,15 +809,19 @@ fun AppListScreen(
         val singleTagNavEnabled = tagRowVisible && !tagState.showUntaggedOnly &&
             tagState.selectedFilterTagIds.size == 1 && tagState.tags.size > 1
         val selectAdjacentTag: (Int) -> Unit = { delta ->
-            val tags = tagState.tags
-            val currentId = tagState.selectedFilterTagIds.firstOrNull()
-            val currentIndex = tags.indexOfFirst { it.tagId == currentId }
-            if (currentIndex >= 0) {
-                val nextIndex = (currentIndex + delta + tags.size) % tags.size
-                PerfLog.log("[LM] tag nav delta=$delta tagId=${tags[nextIndex].tagId}")
-                tagViewModel.selectSingleFilterTag(tags[nextIndex].tagId)
+            val nextId = adjacentTagId(
+                tagIds = tagState.tags.map { it.tagId },
+                currentId = tagState.selectedFilterTagIds.firstOrNull(),
+                delta = delta,
+            )
+            if (nextId != null) {
+                PerfLog.log("[LM] tag nav delta=$delta tagId=$nextId")
+                tagViewModel.selectSingleFilterTag(nextId)
             }
         }
+        // 一覧の左右スワイプでも同じ前/次遷移を行う。◀▶と同じ条件に加え、
+        // タグ編集 (一括選択) 中は誤操作を避けるため無効にする。
+        val tagSwipeEnabled = singleTagNavEnabled && !tagEditMode
 
         // 検索欄はアプリが読み込まれているときだけ表示する。
         // 単一タグ選択中は検索欄を少し短くし、左側に前/次タグの ◀▶ ボタンを出す。
@@ -1096,12 +1102,20 @@ fun AppListScreen(
             }
 
             sortedApps.isEmpty() -> {
-                Text(
-                    text = stringResource(R.string.no_matching_apps),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 16.dp),
-                )
+                // 該当アプリが0件のタグからもスワイプで抜けられるよう、残り領域全体を対象にする。
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .tagSwipeNavigation(tagSwipeEnabled, selectAdjacentTag),
+                ) {
+                    Text(
+                        text = stringResource(R.string.no_matching_apps),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 16.dp),
+                    )
+                }
             }
 
             else -> {
@@ -1354,7 +1368,11 @@ fun AppListScreen(
 
                 // タグ管理パネルは独自の heightIn(max=...) で自己完結して上限を持つため、
                 // ここは以前どおり weight(1f) 単独でよい (weight による比率競合はさせない)。
-                Box(modifier = Modifier.weight(1f)) {
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .tagSwipeNavigation(tagSwipeEnabled, selectAdjacentTag),
+                ) {
                 when (displayMode) {
                     AppDisplayMode.List -> {
                         LazyColumn(
