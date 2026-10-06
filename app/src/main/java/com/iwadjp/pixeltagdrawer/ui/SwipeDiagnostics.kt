@@ -21,6 +21,7 @@ internal data class SwipeGestureDiagnostic(
     val claimed: Boolean,
     val termination: String,
     val result: String,
+    val verticalHandoff: Boolean,
 ) {
     fun line(): String {
         fun f(value: Float) = String.format(Locale.ROOT, "%.1f", value)
@@ -36,7 +37,8 @@ internal data class SwipeGestureDiagnostic(
             " enabled=$enabled edge=$edge childConsumed=$childConsumed multi=$multitouch pointers=$maxPointers" +
             " consumedAtDp=${consumedAtDxDp?.let(::f) ?: "-"},${consumedAtDyDp?.let(::f) ?: "-"}" +
             " startWindowXDp=${f(startWindowXDp)} widthDp=${f(windowWidthDp)}" +
-            " edgeInsetsDp=${f(leftInsetDp)},${f(rightInsetDp)} claimed=$claimed end=$termination result=$result"
+            " edgeInsetsDp=${f(leftInsetDp)},${f(rightInsetDp)} horizontalClaim=$claimed verticalHandoff=$verticalHandoff" +
+            " end=$termination result=$result"
     }
 }
 
@@ -51,7 +53,7 @@ internal object SwipeDiagnostics {
     }
 
     @Synchronized fun report(): String =
-        "SWIPE_DIAG temporary; base=890e3c3; threshold=72dp; ratioMin=2; last60; dp units\n" +
+        "SWIPE_DIAG temporary; arbitration=Initial claim / Final observe; threshold=72dp; ratioMin=2; last60; dp units\n" +
             "Only gestures starting inside the app-list/empty area are observed.\n" +
             "ACCEPT means recognized; flags show all rejection conditions; end shows termination.\n" +
             lines.joinToString("\n").ifEmpty { "(no observed gestures yet)" }

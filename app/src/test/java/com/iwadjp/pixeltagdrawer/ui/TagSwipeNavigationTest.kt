@@ -19,6 +19,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performTouchInput
@@ -91,9 +92,11 @@ class TagSwipeModifierTest {
     private var taps = 0
     private lateinit var listState: LazyListState
     private lateinit var gridState: LazyGridState
+    private var gestureDensity = 1f
 
-    private fun setContent(enabled: Boolean, grid: Boolean = false, diagnostic: Boolean = true, plain: Boolean = false) {
+    private fun setContent(enabled: Boolean, grid: Boolean = false, diagnostic: Boolean = true, plain: Boolean = false, empty: Boolean = false) {
         composeRule.setContent {
+            gestureDensity = LocalDensity.current.density
             listState = rememberLazyListState()
             gridState = rememberLazyGridState()
             Box(Modifier.fillMaxSize().testTag("area").tagSwipeNavigation(
@@ -101,7 +104,9 @@ class TagSwipeModifierTest {
             ) { swipes += it }) {
                 // Production AppRow/AppGridCell are clickable: their DOWN is consumed even
                 // when the eventual gesture is horizontal rather than a tap or vertical drag.
-                if (plain) {
+                if (empty) {
+                    Text("No matching apps")
+                } else if (plain) {
                     Text("plain clickable content", Modifier.fillMaxSize().clickable { taps++ })
                 } else if (grid) {
                     LazyVerticalGrid(columns = GridCells.Fixed(4), state = gridState, modifier = Modifier.fillMaxSize()) {
@@ -161,7 +166,8 @@ class TagSwipeModifierTest {
         }
         assertTrue(swipes.isEmpty())
         assertEquals(0, taps)
-        assertEquals("REJECT_CONSUMED", diagnostics.single().result)
+        assertEquals("VERTICAL_HANDOFF", diagnostics.single().result)
+        assertTrue(diagnostics.single().verticalHandoff)
         assertTrue(diagnostics.single().childConsumed)
     }
 
@@ -223,7 +229,7 @@ class TagSwipeModifierTest {
     @Test fun diagonal_without_child_scroll_reports_ratio_rejection() {
         setContent(enabled = true, plain = true)
         composeRule.onNodeWithTag("area").performTouchInput {
-            swipe(Offset(width * 0.8f, height * 0.4f), Offset(width * 0.4f, height * 0.6f))
+            swipe(Offset(320f, 400f) * gestureDensity, Offset(140f, 530f) * gestureDensity)
         }
         assertEquals("REJECT_DIRECTION_RATIO", diagnostics.single().result)
         assertFalse(diagnostics.single().childConsumed)
@@ -264,4 +270,80 @@ class TagSwipeModifierTest {
         assertEquals("CANCELLED", diagnostics.single().termination)
         assertTrue(swipes.isEmpty())
     }
+
+    private fun measuredHorizontalSwipes(grid: Boolean) {
+        setContent(enabled = true, grid = grid)
+        composeRule.onNodeWithTag("area").performTouchInput {
+            swipe(Offset(320f, 500f) * gestureDensity, Offset(100f, 440f) * gestureDensity, 500)
+        }
+        composeRule.onNodeWithTag("area").performTouchInput {
+            swipe(Offset(80f, 500f) * gestureDensity, Offset(320f, 430f) * gestureDensity, 500)
+        }
+        // Real Lazy scrollables consume the early vertical component before 72dp is reached.
+        // That history must not permanently veto a later, clearly horizontal gesture.
+        assertTrue(diagnostics.all { it.childConsumed })
+        assertEquals(listOf(+1, -1), swipes)
+        assertEquals(listOf("ACCEPT", "ACCEPT"), diagnostics.map { it.result })
+        assertTrue(diagnostics.all { it.claimed && !it.verticalHandoff })
+        assertEquals(0, taps)
+    }
+
+    @Test fun consumed_moves_in_clickable_list_do_not_veto_measured_horizontal_swipes() {
+        measuredHorizontalSwipes(grid = false)
+    }
+
+    @Test fun consumed_moves_in_clickable_grid_do_not_veto_measured_horizontal_swipes() {
+        measuredHorizontalSwipes(grid = true)
+    }
+
+    private fun measuredVerticalSwipe(grid: Boolean) {
+        setContent(enabled = true, grid = grid)
+        composeRule.onNodeWithTag("area").performTouchInput {
+            swipe(Offset(180f, 550f) * gestureDensity, Offset(210f, 340f) * gestureDensity, 500)
+        }
+        composeRule.runOnIdle {
+            val moved = if (grid) gridState.firstVisibleItemIndex > 0 || gridState.firstVisibleItemScrollOffset > 0
+                else listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0
+            assertTrue(moved)
+        }
+        assertTrue(swipes.isEmpty())
+        assertEquals(0, taps)
+        assertEquals("VERTICAL_HANDOFF", diagnostics.single().result)
+        assertFalse(diagnostics.single().claimed)
+    }
+
+    @Test fun measured_vertical_gesture_keeps_list_scrolling() { measuredVerticalSwipe(grid = false) }
+
+    @Test fun measured_vertical_gesture_keeps_grid_scrolling() { measuredVerticalSwipe(grid = true) }
+
+    @Test fun empty_tag_area_accepts_a_measured_horizontal_swipe() {
+        setContent(enabled = true, empty = true)
+        composeRule.onNodeWithTag("area").performTouchInput {
+            swipe(Offset(300f, 500f) * gestureDensity, Offset(120f, 480f) * gestureDensity, 500)
+        }
+        assertEquals(listOf(+1), swipes)
+        assertEquals("ACCEPT", diagnostics.single().result)
+        assertEquals(0, taps)
+    }
+
+    private fun cancelAfterHorizontalClaim(diagnostic: Boolean) {
+        setContent(enabled = true, plain = true, diagnostic = diagnostic)
+        composeRule.onNodeWithTag("area").performTouchInput {
+            down(Offset(320f, 500f) * gestureDensity)
+            moveTo(Offset(100f, 440f) * gestureDensity)
+            cancel()
+        }
+        assertTrue(swipes.isEmpty())
+        assertEquals(0, taps)
+        if (diagnostic) {
+            assertTrue(diagnostics.single().claimed)
+            assertEquals("REJECT_CANCELLED", diagnostics.single().result)
+        } else {
+            assertTrue(diagnostics.isEmpty())
+        }
+    }
+
+    @Test fun cancelled_horizontal_claim_never_navigates() { cancelAfterHorizontalClaim(diagnostic = true) }
+
+    @Test fun cancelled_horizontal_claim_never_navigates_without_diagnostics() { cancelAfterHorizontalClaim(diagnostic = false) }
 }

@@ -69,10 +69,10 @@ internal fun startsInSystemGestureEdge(
 ): Boolean = startX < leftInsetPx || startX > windowWidthPx - rightInsetPx
 
 /**
- * Observes one-finger drags, yielding to child taps and vertical scrolling until a clear
- * horizontal swipe is recognized. Only then consume movement to cancel the child's tap.
- * A movement the child already consumed (vertical scroll),
- * a multi-touch gesture, or one that starts in a system gesture edge is ignored.
+ * Yields to child taps/scrolling until the unchanged distance and ratio rules identify a
+ * horizontal swipe. Claim in Initial before children process that movement; observe child
+ * consumption in Final without treating its earlier scroll activity as a permanent veto.
+ * Multi-touch, cancellation, and system gesture edge starts never navigate.
  * [onSwipe] receives +1 (next) or -1 (previous).
  */
 @Composable
@@ -87,7 +87,7 @@ internal fun Modifier.tagSwipeNavigation(
     val layoutDirection = LocalLayoutDirection.current
     val currentOnSwipe by rememberUpdatedState(onSwipe)
     val currentOnDiagnostic by rememberUpdatedState(onDiagnostic)
-    // Diagnostic observation only: never captures or consumes Android MotionEvents.
+    // Observe native termination (including synthesized cancellation); never consume here.
     val nativeAction = remember { intArrayOf(MotionEvent.ACTION_CANCEL) }
     val minDistancePx = with(density) { TAG_SWIPE_MIN_DISTANCE_DP.dp.toPx() }
     val leftInsetPx = WindowInsets.systemGestures.getLeft(density, layoutDirection).toFloat()
@@ -95,7 +95,7 @@ internal fun Modifier.tagSwipeNavigation(
     var originX by remember { mutableFloatStateOf(0f) }
     var windowWidthPx by remember { mutableIntStateOf(0) }
     return this
-        .then(if (diagnostics) Modifier.motionEventSpy { nativeAction[0] = it.actionMasked } else Modifier)
+        .then(if (enabled || diagnostics) Modifier.motionEventSpy { nativeAction[0] = it.actionMasked } else Modifier)
         .onGloballyPositioned { coords ->
             originX = coords.positionInWindow().x
             windowWidthPx = coords.findRootCoordinates().size.width
@@ -122,10 +122,11 @@ internal fun Modifier.tagSwipeNavigation(
                 var consumedAt: Offset? = null
                 var termination = "CANCELLED"
                 var result = "REJECT_CANCELLED"
+                var verticalHandoff = false
                 try {
                     while (true) {
-                        // Final pass: children (e.g. the vertical scroller) have already had their say.
-                        val event = awaitPointerEvent(PointerEventPass.Final)
+                        // Initial travels parent -> child: arbitrate before scrollable/clickable.
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
                         maxPointers = maxOf(maxPointers, event.changes.size)
                         if (event.changes.size > 1) {
                             multitouch = true
@@ -136,45 +137,50 @@ internal fun Modifier.tagSwipeNavigation(
                             termination = "POINTER_LOST"
                             break
                         }
-                        // clickable consumes DOWN in Main, before we see that same event in
-                        // Final. That is a tap candidate, not a consumed drag. Only consumed
-                        // movement disqualifies navigation; keep yielding to child scrolling.
-                        if (change.isConsumed && change.pressed && change.position != change.previousPosition) {
-                            if (!childConsumed) consumedAt = change.position - start
-                            childConsumed = true
-                            rejected = true
-                        }
                         end = change.position
-                        if (!change.pressed) {
-                            // Compose can synthesize a released pointer when a node is removed
-                            // or Android cancels input. Don't confuse that with a native UP.
-                            termination = if (diagnostics && nativeAction[0] != MotionEvent.ACTION_UP &&
-                                nativeAction[0] != MotionEvent.ACTION_POINTER_UP) "CANCELLED" else "UP"
-                            break
-                        }
+                        val moved = change.position != change.previousPosition
+                        val nativeUp = nativeAction[0] == MotionEvent.ACTION_UP ||
+                            nativeAction[0] == MotionEvent.ACTION_POINTER_UP
+                        var consumedByParent = false
                         if (enabled && !rejected) {
-                            if (resolveHorizontalSwipe(end.x - start.x, end.y - start.y, minDistancePx) != null) {
+                            if ((change.pressed || nativeUp) &&
+                                resolveHorizontalSwipe(end.x - start.x, end.y - start.y, minDistancePx) != null) {
                                 horizontalClaimed = true
                             }
-                            // Final travels parent -> child. Cancel a clickable's pending tap
-                            // before its Final pass, but leave DOWN and vertical drags untouched.
-                            if (horizontalClaimed && change.position != change.previousPosition) {
+                            // Only a confirmed horizontal gesture owns movement/UP. This also
+                            // cancels a pending app click and an already-started child scroll.
+                            if (horizontalClaimed && (moved || !change.pressed)) {
                                 change.consume()
+                                consumedByParent = true
                             }
+                        }
+                        val finalEvent = awaitPointerEvent(PointerEventPass.Final)
+                        val finalChange = finalEvent.changes.firstOrNull { it.id == down.id }
+                        if (!consumedByParent && moved && change.pressed && finalChange?.isConsumed == true) {
+                            if (!childConsumed) consumedAt = change.position - start
+                            childConsumed = true
+                        }
+                        if (!change.pressed) {
+                            termination = if (nativeUp) "UP" else "CANCELLED"
+                            break
                         }
                     }
                     val dx = end.x - start.x
                     val dy = end.y - start.y
-                    val delta = if (enabled && !rejected) resolveHorizontalSwipe(dx, dy, minDistancePx) else null
+                    verticalHandoff = enabled && !rejected && !horizontalClaimed &&
+                        abs(dy) >= viewConfiguration.touchSlop && abs(dy) > abs(dx)
+                    val delta = if (enabled && !rejected && termination == "UP")
+                        resolveHorizontalSwipe(dx, dy, minDistancePx) else null
                     result = when {
-                        diagnostics && termination == "CANCELLED" && delta == null -> "REJECT_CANCELLED"
+                        termination == "CANCELLED" -> "REJECT_CANCELLED"
+                        termination == "POINTER_LOST" -> "REJECT_POINTER_LOST"
                         !enabled -> "REJECT_DISABLED"
                         edge -> "REJECT_EDGE"
                         multitouch -> "REJECT_MULTITOUCH"
-                        childConsumed -> "REJECT_CONSUMED"
+                        delta != null -> "ACCEPT"
+                        verticalHandoff -> "VERTICAL_HANDOFF"
                         abs(dx) < minDistancePx -> "REJECT_DISTANCE"
                         abs(dx) < abs(dy) * TAG_SWIPE_DOMINANCE_RATIO -> "REJECT_DIRECTION_RATIO"
-                        delta != null -> "ACCEPT"
                         else -> "REJECT_OTHER"
                     }
                     delta?.let { currentOnSwipe(it) }
@@ -192,6 +198,7 @@ internal fun Modifier.tagSwipeNavigation(
                             windowWidthDp = widthOnDown / scale,
                             leftInsetDp = leftInsetPx / scale, rightInsetDp = rightInsetPx / scale,
                             claimed = horizontalClaimed, termination = termination, result = result,
+                            verticalHandoff = verticalHandoff,
                         ))
                     }
                 }
