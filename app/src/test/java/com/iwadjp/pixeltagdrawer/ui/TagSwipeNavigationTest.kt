@@ -1,9 +1,19 @@
 package com.iwadjp.pixeltagdrawer.ui
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.LazyGridState
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -15,6 +25,8 @@ import androidx.compose.ui.test.swipe
 import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.swipeRight
 import androidx.compose.ui.test.swipeUp
+import androidx.compose.ui.test.click
+import androidx.compose.ui.unit.dp
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -74,12 +86,29 @@ class TagSwipeLogicTest {
 class TagSwipeModifierTest {
     @get:Rule val composeRule = createComposeRule()
     private val swipes = mutableListOf<Int>()
+    private var taps = 0
+    private lateinit var listState: LazyListState
+    private lateinit var gridState: LazyGridState
 
-    private fun setContent(enabled: Boolean) {
+    private fun setContent(enabled: Boolean, grid: Boolean = false) {
         composeRule.setContent {
+            listState = rememberLazyListState()
+            gridState = rememberLazyGridState()
             Box(Modifier.fillMaxSize().testTag("area").tagSwipeNavigation(enabled) { swipes += it }) {
-                LazyColumn(Modifier.fillMaxSize()) {
-                    items((0 until 100).toList()) { Text("row $it") }
+                // Production AppRow/AppGridCell are clickable: their DOWN is consumed even
+                // when the eventual gesture is horizontal rather than a tap or vertical drag.
+                if (grid) {
+                    LazyVerticalGrid(columns = GridCells.Fixed(4), state = gridState, modifier = Modifier.fillMaxSize()) {
+                        items((0 until 100).toList()) {
+                            Text("cell $it", Modifier.fillMaxWidth().height(64.dp).clickable { taps++ })
+                        }
+                    }
+                } else {
+                    LazyColumn(Modifier.fillMaxSize(), state = listState) {
+                        items((0 until 100).toList()) {
+                            Text("row $it", Modifier.fillMaxWidth().height(64.dp).clickable { taps++ })
+                        }
+                    }
                 }
             }
         }
@@ -90,12 +119,49 @@ class TagSwipeModifierTest {
         composeRule.onNodeWithTag("area").performTouchInput { swipeLeft() }
         composeRule.onNodeWithTag("area").performTouchInput { swipeRight() }
         assertEquals(listOf(+1, -1), swipes)
+        assertEquals(0, taps)
+    }
+
+    @Test fun clickable_grid_accepts_horizontal_swipes_without_clicking_cells() {
+        setContent(enabled = true, grid = true)
+        composeRule.onNodeWithTag("area").performTouchInput { swipeLeft() }
+        composeRule.onNodeWithTag("area").performTouchInput { swipeRight() }
+        assertEquals(listOf(+1, -1), swipes)
+        assertEquals(0, taps)
+    }
+
+    @Test fun clickable_row_keeps_taps_without_switching_tag() {
+        setContent(enabled = true)
+        composeRule.onNodeWithTag("area").performTouchInput { click() }
+        assertEquals(1, taps)
+        assertTrue(swipes.isEmpty())
+    }
+
+    @Test fun clickable_grid_keeps_taps_without_switching_tag() {
+        setContent(enabled = true, grid = true)
+        composeRule.onNodeWithTag("area").performTouchInput { click() }
+        assertEquals(1, taps)
+        assertTrue(swipes.isEmpty())
+    }
+
+    @Test fun clickable_grid_keeps_vertical_scrolling_without_switching_tag() {
+        setContent(enabled = true, grid = true)
+        composeRule.onNodeWithTag("area").performTouchInput { swipeUp() }
+        composeRule.runOnIdle {
+            assertTrue(gridState.firstVisibleItemIndex > 0 || gridState.firstVisibleItemScrollOffset > 0)
+        }
+        assertTrue(swipes.isEmpty())
+        assertEquals(0, taps)
     }
 
     @Test fun vertical_scroll_does_not_switch_tag() {
         setContent(enabled = true)
         composeRule.onNodeWithTag("area").performTouchInput { swipeUp() }
         assertTrue(swipes.isEmpty())
+        composeRule.runOnIdle {
+            assertTrue(listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0)
+        }
+        assertEquals(0, taps)
     }
 
     @Test fun mostly_vertical_diagonal_scroll_does_not_switch_tag() {

@@ -65,8 +65,9 @@ internal fun startsInSystemGestureEdge(
 ): Boolean = startX < leftInsetPx || startX > windowWidthPx - rightInsetPx
 
 /**
- * Observes one-finger drags over the content without consuming them, so child taps and the
- * vertical list scroll keep working. A drag the child already consumed (vertical scroll),
+ * Observes one-finger drags, yielding to child taps and vertical scrolling until a clear
+ * horizontal swipe is recognized. Only then consume movement to cancel the child's tap.
+ * A movement the child already consumed (vertical scroll),
  * a multi-touch gesture, or one that starts in a system gesture edge is ignored.
  * [onSwipe] receives +1 (next) or -1 (previous).
  */
@@ -91,6 +92,7 @@ internal fun Modifier.tagSwipeNavigation(enabled: Boolean, onSwipe: (Int) -> Uni
                 val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
                 val start = down.position
                 var end: Offset = start
+                var horizontalClaimed = false
                 var rejected = startsInSystemGestureEdge(
                     startX = originX + start.x,
                     windowWidthPx = windowWidthPx.toFloat(),
@@ -102,9 +104,24 @@ internal fun Modifier.tagSwipeNavigation(enabled: Boolean, onSwipe: (Int) -> Uni
                     val event = awaitPointerEvent(PointerEventPass.Final)
                     if (event.changes.size > 1) rejected = true
                     val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                    if (change.isConsumed && change.pressed) rejected = true
+                    // clickable consumes DOWN in Main, before we see that same event in
+                    // Final. That is a tap candidate, not a consumed drag. Only consumed
+                    // movement disqualifies navigation; keep yielding to child scrolling.
+                    if (change.isConsumed && change.pressed && change.position != change.previousPosition) {
+                        rejected = true
+                    }
                     end = change.position
                     if (!change.pressed) break
+                    if (!rejected) {
+                        if (resolveHorizontalSwipe(end.x - start.x, end.y - start.y, minDistancePx) != null) {
+                            horizontalClaimed = true
+                        }
+                        // Final travels parent -> child. Cancel a clickable's pending tap
+                        // before its Final pass, but leave DOWN and vertical drags untouched.
+                        if (horizontalClaimed && change.position != change.previousPosition) {
+                            change.consume()
+                        }
+                    }
                 }
                 if (!rejected) {
                     resolveHorizontalSwipe(end.x - start.x, end.y - start.y, minDistancePx)
