@@ -1,0 +1,1 @@
+Swipe left or right on the app list to switch between adjacent tags, with wrap-around. Vertical scrolling and app taps remain available.

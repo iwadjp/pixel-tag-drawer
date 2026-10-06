@@ -96,20 +96,16 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInParent
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.iwadjp.pixeltagdrawer.ui.adjacentTagId
 import com.iwadjp.pixeltagdrawer.ui.tagSwipeNavigation
-import com.iwadjp.pixeltagdrawer.ui.SwipeDiagnostics
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -439,10 +435,6 @@ fun AppListScreen(
         showImportConfirm = true
     }
 
-    // 起動計測の診断ダイアログ (adb 不要で計測値を確認/コピーするため)。
-    val clipboard = LocalClipboardManager.current
-    var showDiagnostics by remember { mutableStateOf(false) }
-    var diagnosticsReport by remember { mutableStateOf("") }
 
     // プライバシーポリシー導線 (アプリ内本文をダイアログで表示)。
     var showPrivacyPolicy by remember { mutableStateOf(false) }
@@ -609,18 +601,7 @@ fun AppListScreen(
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.weight(1f),
             )
-            // 通常releaseでは非表示。一時的なswipeDiagnostics APKだけ既存コピー導線を使う。
-            // 通常/簡素表示のどちらでも参照できるよう、デバッグビルドでは常時表示する。
-            if (BuildConfig.DEBUG || BuildConfig.SWIPE_DIAGNOSTICS) {
-                TextButton(onClick = {
-                    diagnosticsReport = if (BuildConfig.SWIPE_DIAGNOSTICS) SwipeDiagnostics.report() else PerfLog.report()
-                    showDiagnostics = true
-                }) {
-                    Text("診断")
-                }
-            }
-            // 「編集」「一覧に戻る」の表示条件は3モードに基づき一意に決める。
-            // 通常モード: どちらも出さない / 簡素: 編集のみ / 編集: 一覧に戻るのみ。
+            // Mode controls the Edit / Return to list buttons.
             when (uiMode) {
                 ShortcutUiMode.Simplified -> {
                     TextButton(onClick = {
@@ -669,17 +650,6 @@ fun AppListScreen(
             }
         }
 
-        // 起動計測の診断ダイアログ。adb なしで計測値を確認・コピーできる。
-        if (showDiagnostics) {
-            DiagnosticsDialog(
-                report = diagnosticsReport,
-                onRefresh = { diagnosticsReport = if (BuildConfig.SWIPE_DIAGNOSTICS) SwipeDiagnostics.report() else PerfLog.report() },
-                onCopy = { clipboard.setText(AnnotatedString(diagnosticsReport)) },
-                onDismiss = { showDiagnostics = false },
-            )
-        }
-
-        // プライバシーポリシー本文ダイアログ。
         if (showPrivacyPolicy) {
             PrivacyPolicyDialog(onDismiss = { showPrivacyPolicy = false })
         }
@@ -1906,61 +1876,6 @@ private fun TagFilterSection(
     }
 }
 
-@Composable
-private fun DiagnosticsDialog(
-    report: String,
-    onRefresh: () -> Unit,
-    onCopy: () -> Unit,
-    onDismiss: () -> Unit,
-) {
-    var copied by remember { mutableStateOf(false) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("起動計測 診断") },
-        text = {
-            Column(
-                modifier = Modifier
-                    .heightIn(max = 420.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Text(
-                    text = report.ifEmpty { "(計測データなし)" },
-                    style = MaterialTheme.typography.labelSmall,
-                    fontFamily = FontFamily.Monospace,
-                )
-                if (copied) {
-                    Text(
-                        text = "診断情報をコピーしました",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = {
-                onCopy()
-                copied = true
-            }) {
-                Text("コピー")
-            }
-        },
-        dismissButton = {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick = {
-                    onRefresh()
-                    copied = false
-                }) {
-                    Text("ログ再読込")
-                }
-                TextButton(onClick = onDismiss) {
-                    Text("閉じる")
-                }
-            }
-        },
-    )
-}
 
 /**
  * UIモード。通常起動/ショートカット起動の表示文脈を一意に表す。

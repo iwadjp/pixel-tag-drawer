@@ -25,7 +25,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.dp
 import kotlin.math.abs
-import com.iwadjp.pixeltagdrawer.BuildConfig
 
 /** Horizontal travel (dp) a release must cover before it counts as a tag swipe. */
 internal const val TAG_SWIPE_MIN_DISTANCE_DP = 72f
@@ -79,14 +78,11 @@ internal fun startsInSystemGestureEdge(
 @OptIn(ExperimentalComposeUiApi::class)
 internal fun Modifier.tagSwipeNavigation(
     enabled: Boolean,
-    diagnostics: Boolean = BuildConfig.SWIPE_DIAGNOSTICS,
-    onDiagnostic: (SwipeGestureDiagnostic) -> Unit = SwipeDiagnostics::record,
     onSwipe: (Int) -> Unit,
 ): Modifier {
     val density = LocalDensity.current
     val layoutDirection = LocalLayoutDirection.current
     val currentOnSwipe by rememberUpdatedState(onSwipe)
-    val currentOnDiagnostic by rememberUpdatedState(onDiagnostic)
     // Observe native termination (including synthesized cancellation); never consume here.
     val nativeAction = remember { intArrayOf(MotionEvent.ACTION_CANCEL) }
     val minDistancePx = with(density) { TAG_SWIPE_MIN_DISTANCE_DP.dp.toPx() }
@@ -95,13 +91,13 @@ internal fun Modifier.tagSwipeNavigation(
     var originX by remember { mutableFloatStateOf(0f) }
     var windowWidthPx by remember { mutableIntStateOf(0) }
     return this
-        .then(if (enabled || diagnostics) Modifier.motionEventSpy { nativeAction[0] = it.actionMasked } else Modifier)
+        .then(if (enabled) Modifier.motionEventSpy { nativeAction[0] = it.actionMasked } else Modifier)
         .onGloballyPositioned { coords ->
             originX = coords.positionInWindow().x
             windowWidthPx = coords.findRootCoordinates().size.width
         }
-        .pointerInput(enabled, diagnostics, minDistancePx, leftInsetPx, rightInsetPx) {
-            if (!enabled && !diagnostics) return@pointerInput
+        .pointerInput(enabled, minDistancePx, leftInsetPx, rightInsetPx) {
+            if (!enabled) return@pointerInput
             awaitEachGesture {
                 val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
                 val start = down.position
@@ -116,92 +112,45 @@ internal fun Modifier.tagSwipeNavigation(
                     rightInsetPx = rightInsetPx,
                 )
                 var rejected = edge
-                var multitouch = false
-                var childConsumed = false
-                var maxPointers = 1
-                var consumedAt: Offset? = null
                 var termination = "CANCELLED"
-                var result = "REJECT_CANCELLED"
-                var verticalHandoff = false
-                try {
-                    while (true) {
-                        // Initial travels parent -> child: arbitrate before scrollable/clickable.
-                        val event = awaitPointerEvent(PointerEventPass.Initial)
-                        maxPointers = maxOf(maxPointers, event.changes.size)
-                        if (event.changes.size > 1) {
-                            multitouch = true
-                            rejected = true
+                while (true) {
+                    // Initial travels parent -> child: arbitrate before scrollable/clickable.
+                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                    if (event.changes.size > 1) {
+                        rejected = true
+                    }
+                    val change = event.changes.firstOrNull { it.id == down.id }
+                    if (change == null) {
+                        termination = "POINTER_LOST"
+                        break
+                    }
+                    end = change.position
+                    val moved = change.position != change.previousPosition
+                    val nativeUp = nativeAction[0] == MotionEvent.ACTION_UP ||
+                        nativeAction[0] == MotionEvent.ACTION_POINTER_UP
+                    if (enabled && !rejected) {
+                        if ((change.pressed || nativeUp) &&
+                            resolveHorizontalSwipe(end.x - start.x, end.y - start.y, minDistancePx) != null) {
+                            horizontalClaimed = true
                         }
-                        val change = event.changes.firstOrNull { it.id == down.id }
-                        if (change == null) {
-                            termination = "POINTER_LOST"
-                            break
-                        }
-                        end = change.position
-                        val moved = change.position != change.previousPosition
-                        val nativeUp = nativeAction[0] == MotionEvent.ACTION_UP ||
-                            nativeAction[0] == MotionEvent.ACTION_POINTER_UP
-                        var consumedByParent = false
-                        if (enabled && !rejected) {
-                            if ((change.pressed || nativeUp) &&
-                                resolveHorizontalSwipe(end.x - start.x, end.y - start.y, minDistancePx) != null) {
-                                horizontalClaimed = true
-                            }
-                            // Only a confirmed horizontal gesture owns movement/UP. This also
-                            // cancels a pending app click and an already-started child scroll.
-                            if (horizontalClaimed && (moved || !change.pressed)) {
-                                change.consume()
-                                consumedByParent = true
-                            }
-                        }
-                        val finalEvent = awaitPointerEvent(PointerEventPass.Final)
-                        val finalChange = finalEvent.changes.firstOrNull { it.id == down.id }
-                        if (!consumedByParent && moved && change.pressed && finalChange?.isConsumed == true) {
-                            if (!childConsumed) consumedAt = change.position - start
-                            childConsumed = true
-                        }
-                        if (!change.pressed) {
-                            termination = if (nativeUp) "UP" else "CANCELLED"
-                            break
+                        // Only a confirmed horizontal gesture owns movement/UP. This also
+                        // cancels a pending app click and an already-started child scroll.
+                        if (horizontalClaimed && (moved || !change.pressed)) {
+                            change.consume()
                         }
                     }
-                    val dx = end.x - start.x
-                    val dy = end.y - start.y
-                    verticalHandoff = enabled && !rejected && !horizontalClaimed &&
-                        abs(dy) >= viewConfiguration.touchSlop && abs(dy) > abs(dx)
-                    val delta = if (enabled && !rejected && termination == "UP")
-                        resolveHorizontalSwipe(dx, dy, minDistancePx) else null
-                    result = when {
-                        termination == "CANCELLED" -> "REJECT_CANCELLED"
-                        termination == "POINTER_LOST" -> "REJECT_POINTER_LOST"
-                        !enabled -> "REJECT_DISABLED"
-                        edge -> "REJECT_EDGE"
-                        multitouch -> "REJECT_MULTITOUCH"
-                        delta != null -> "ACCEPT"
-                        verticalHandoff -> "VERTICAL_HANDOFF"
-                        abs(dx) < minDistancePx -> "REJECT_DISTANCE"
-                        abs(dx) < abs(dy) * TAG_SWIPE_DOMINANCE_RATIO -> "REJECT_DIRECTION_RATIO"
-                        else -> "REJECT_OTHER"
-                    }
-                    delta?.let { currentOnSwipe(it) }
-                } finally {
-                    if (diagnostics) {
-                        val scale = density.density
-                        currentOnDiagnostic(SwipeGestureDiagnostic(
-                            dxDp = (end.x - start.x) / scale,
-                            dyDp = (end.y - start.y) / scale,
-                            enabled = enabled, edge = edge, multitouch = multitouch,
-                            childConsumed = childConsumed, maxPointers = maxPointers,
-                            consumedAtDxDp = consumedAt?.x?.div(scale),
-                            consumedAtDyDp = consumedAt?.y?.div(scale),
-                            startWindowXDp = startWindowX / scale,
-                            windowWidthDp = widthOnDown / scale,
-                            leftInsetDp = leftInsetPx / scale, rightInsetDp = rightInsetPx / scale,
-                            claimed = horizontalClaimed, termination = termination, result = result,
-                            verticalHandoff = verticalHandoff,
-                        ))
+                    // Finish the child event pass without vetoing consumed movement.
+                    awaitPointerEvent(PointerEventPass.Final)
+                    if (!change.pressed) {
+                        termination = if (nativeUp) "UP" else "CANCELLED"
+                        break
                     }
                 }
+                val dx = end.x - start.x
+                val dy = end.y - start.y
+                val delta = if (enabled && !rejected && termination == "UP")
+                    resolveHorizontalSwipe(dx, dy, minDistancePx) else null
+                delta?.let { currentOnSwipe(it) }
             }
         }
 }

@@ -17,6 +17,8 @@ import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalDensity
@@ -88,19 +90,31 @@ class TagSwipeLogicTest {
 class TagSwipeModifierTest {
     @get:Rule val composeRule = createComposeRule()
     private val swipes = mutableListOf<Int>()
-    private val diagnostics = mutableListOf<SwipeGestureDiagnostic>()
+    private var childConsumedMoves = 0
     private var taps = 0
     private lateinit var listState: LazyListState
     private lateinit var gridState: LazyGridState
     private var gestureDensity = 1f
 
-    private fun setContent(enabled: Boolean, grid: Boolean = false, diagnostic: Boolean = true, plain: Boolean = false, empty: Boolean = false) {
+    private fun setContent(enabled: Boolean, grid: Boolean = false, plain: Boolean = false, empty: Boolean = false) {
         composeRule.setContent {
             gestureDensity = LocalDensity.current.density
             listState = rememberLazyListState()
             gridState = rememberLazyGridState()
-            Box(Modifier.fillMaxSize().testTag("area").tagSwipeNavigation(
-                enabled, diagnostics = diagnostic, onDiagnostic = { diagnostics += it },
+            Box(Modifier.fillMaxSize().testTag("area").pointerInput(Unit) {
+                awaitPointerEventScope {
+                    var start = Offset.Zero
+                    while (true) {
+                        val event = awaitPointerEvent(PointerEventPass.Final)
+                        event.changes.firstOrNull()?.let { change ->
+                            if (change.pressed && !change.previousPressed) start = change.position
+                            if (change.pressed && change.position != change.previousPosition && change.isConsumed &&
+                                kotlin.math.abs(change.position.x - start.x) < 72f * gestureDensity) childConsumedMoves++
+                        }
+                    }
+                }
+            }.tagSwipeNavigation(
+                enabled,
             ) { swipes += it }) {
                 // Production AppRow/AppGridCell are clickable: their DOWN is consumed even
                 // when the eventual gesture is horizontal rather than a tap or vertical drag.
@@ -131,8 +145,6 @@ class TagSwipeModifierTest {
         composeRule.onNodeWithTag("area").performTouchInput { swipeRight() }
         assertEquals(listOf(+1, -1), swipes)
         assertEquals(0, taps)
-        assertEquals(listOf("ACCEPT", "ACCEPT"), diagnostics.map { it.result })
-        assertTrue(diagnostics.all { it.enabled && !it.childConsumed && !it.edge })
     }
 
     @Test fun clickable_grid_accepts_horizontal_swipes_without_clicking_cells() {
@@ -148,7 +160,6 @@ class TagSwipeModifierTest {
         composeRule.onNodeWithTag("area").performTouchInput { click() }
         assertEquals(1, taps)
         assertTrue(swipes.isEmpty())
-        assertEquals("REJECT_DISTANCE", diagnostics.single().result)
     }
 
     @Test fun clickable_grid_keeps_taps_without_switching_tag() {
@@ -166,9 +177,6 @@ class TagSwipeModifierTest {
         }
         assertTrue(swipes.isEmpty())
         assertEquals(0, taps)
-        assertEquals("VERTICAL_HANDOFF", diagnostics.single().result)
-        assertTrue(diagnostics.single().verticalHandoff)
-        assertTrue(diagnostics.single().childConsumed)
     }
 
     @Test fun vertical_scroll_does_not_switch_tag() {
@@ -193,50 +201,38 @@ class TagSwipeModifierTest {
         setContent(enabled = false)
         composeRule.onNodeWithTag("area").performTouchInput { swipeLeft() }
         assertTrue(swipes.isEmpty())
-        assertEquals("REJECT_DISABLED", diagnostics.single().result)
-        assertFalse(diagnostics.single().enabled)
     }
 
-    @Test fun diagnostics_off_preserves_horizontal_swipe_without_recording() {
-        setContent(enabled = true, diagnostic = false)
+    @Test fun plain_clickable_content_preserves_horizontal_swipe() {
+        setContent(enabled = true)
         composeRule.onNodeWithTag("area").performTouchInput { swipeLeft() }
         assertEquals(listOf(+1), swipes)
         assertEquals(0, taps)
-        assertTrue(diagnostics.isEmpty())
     }
 
-    @Test fun disabled_diagnostics_off_does_not_record_or_navigate() {
-        setContent(enabled = false, diagnostic = false)
+    @Test fun disabled_does_not_navigate() {
+        setContent(enabled = false)
         composeRule.onNodeWithTag("area").performTouchInput { swipeLeft() }
         assertTrue(swipes.isEmpty())
-        assertTrue(diagnostics.isEmpty())
     }
 
-    @Test fun short_gesture_reports_distance_and_measured_displacement() {
+    @Test fun short_gesture_does_not_navigate() {
         setContent(enabled = true, plain = true)
         composeRule.onNodeWithTag("area").performTouchInput {
             swipe(Offset(width * 0.6f, height * 0.5f), Offset(width * 0.55f, height * 0.5f))
         }
-        val diagnostic = diagnostics.single()
-        assertEquals("REJECT_DISTANCE", diagnostic.result)
-        assertTrue(diagnostic.dxDp < 0f && kotlin.math.abs(diagnostic.dxDp) < 72f)
-        assertFalse(diagnostic.childConsumed)
         assertTrue(swipes.isEmpty())
-        assertTrue(diagnostic.line().contains("distance72=false"))
-        assertFalse(diagnostic.line().contains("\n"))
     }
 
-    @Test fun diagonal_without_child_scroll_reports_ratio_rejection() {
+    @Test fun diagonal_without_child_scroll_does_not_navigate() {
         setContent(enabled = true, plain = true)
         composeRule.onNodeWithTag("area").performTouchInput {
             swipe(Offset(320f, 400f) * gestureDensity, Offset(140f, 530f) * gestureDensity)
         }
-        assertEquals("REJECT_DIRECTION_RATIO", diagnostics.single().result)
-        assertFalse(diagnostics.single().childConsumed)
         assertTrue(swipes.isEmpty())
     }
 
-    @Test fun multitouch_is_reported_once_without_navigation() {
+    @Test fun multitouch_does_not_navigate() {
         setContent(enabled = true, plain = true)
         composeRule.onNodeWithTag("area").performTouchInput {
             down(0, Offset(width * 0.7f, height * 0.4f))
@@ -245,18 +241,15 @@ class TagSwipeModifierTest {
             up(0)
             up(1)
         }
-        assertEquals("REJECT_MULTITOUCH", diagnostics.single().result)
-        assertTrue(diagnostics.single().multitouch)
-        assertEquals(2, diagnostics.single().maxPointers)
         assertTrue(swipes.isEmpty())
     }
 
-    @Test fun disposal_of_an_active_gesture_records_cancellation_once() {
+    @Test fun disposal_of_an_active_gesture_does_not_navigate() {
         val visible = mutableStateOf(true)
         composeRule.setContent {
             if (visible.value) {
                 Box(Modifier.fillMaxSize().testTag("area").tagSwipeNavigation(
-                    true, diagnostics = true, onDiagnostic = { diagnostics += it },
+                    true,
                 ) { swipes += it })
             }
         }
@@ -266,8 +259,6 @@ class TagSwipeModifierTest {
         }
         composeRule.runOnIdle { visible.value = false }
         composeRule.waitForIdle()
-        assertEquals("REJECT_CANCELLED", diagnostics.single().result)
-        assertEquals("CANCELLED", diagnostics.single().termination)
         assertTrue(swipes.isEmpty())
     }
 
@@ -281,10 +272,8 @@ class TagSwipeModifierTest {
         }
         // Real Lazy scrollables consume the early vertical component before 72dp is reached.
         // That history must not permanently veto a later, clearly horizontal gesture.
-        assertTrue(diagnostics.all { it.childConsumed })
+        assertTrue(childConsumedMoves > 0)
         assertEquals(listOf(+1, -1), swipes)
-        assertEquals(listOf("ACCEPT", "ACCEPT"), diagnostics.map { it.result })
-        assertTrue(diagnostics.all { it.claimed && !it.verticalHandoff })
         assertEquals(0, taps)
     }
 
@@ -308,8 +297,6 @@ class TagSwipeModifierTest {
         }
         assertTrue(swipes.isEmpty())
         assertEquals(0, taps)
-        assertEquals("VERTICAL_HANDOFF", diagnostics.single().result)
-        assertFalse(diagnostics.single().claimed)
     }
 
     @Test fun measured_vertical_gesture_keeps_list_scrolling() { measuredVerticalSwipe(grid = false) }
@@ -322,12 +309,11 @@ class TagSwipeModifierTest {
             swipe(Offset(300f, 500f) * gestureDensity, Offset(120f, 480f) * gestureDensity, 500)
         }
         assertEquals(listOf(+1), swipes)
-        assertEquals("ACCEPT", diagnostics.single().result)
         assertEquals(0, taps)
     }
 
-    private fun cancelAfterHorizontalClaim(diagnostic: Boolean) {
-        setContent(enabled = true, plain = true, diagnostic = diagnostic)
+    private fun cancelAfterHorizontalClaim() {
+        setContent(enabled = true, plain = true)
         composeRule.onNodeWithTag("area").performTouchInput {
             down(Offset(320f, 500f) * gestureDensity)
             moveTo(Offset(100f, 440f) * gestureDensity)
@@ -335,15 +321,9 @@ class TagSwipeModifierTest {
         }
         assertTrue(swipes.isEmpty())
         assertEquals(0, taps)
-        if (diagnostic) {
-            assertTrue(diagnostics.single().claimed)
-            assertEquals("REJECT_CANCELLED", diagnostics.single().result)
-        } else {
-            assertTrue(diagnostics.isEmpty())
-        }
+
     }
 
-    @Test fun cancelled_horizontal_claim_never_navigates() { cancelAfterHorizontalClaim(diagnostic = true) }
+    @Test fun cancelled_horizontal_claim_never_navigates() { cancelAfterHorizontalClaim() }
 
-    @Test fun cancelled_horizontal_claim_never_navigates_without_diagnostics() { cancelAfterHorizontalClaim(diagnostic = false) }
 }

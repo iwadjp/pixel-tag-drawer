@@ -4,6 +4,16 @@ pixel-tag-drawer の公開用進捗ログ。実機確認やマイルストーン
 
 ---
 
+## 2026-10-06 v0.1.6 release preparation - Horizontal tag swipe
+
+- Human accepted `8baf2f4`: horizontal swipes are usable daily, including after child scroll consumption; disabled gestures remain disabled.
+- Remove temporary swipe diagnostics, diagnostic UI/copy entry and build flag. Preserve 72dp / ratio 2, Initial horizontal claim / Final observe, tag order/wrap, taps, vertical scrolling, list/grid/empty, bulk-edit exclusion and system Back edges.
+- Planned patch: versionName `0.1.6`, versionCode `7`. No publication, tag, Issue reply or F-Droid operation yet.
+- Verification: relevant 27 and full 124 tests PASS (0 failures/errors/skips), lint PASS, assembleDebug/assembleRelease PASS, diff check PASS. Release DEX excludes temporary diagnostic classes/flag/dialog/copy strings.
+- Future UX candidate: smoother page-follow/transition animation. Not an acceptance blocker; deferred without changing accepted recognition.
+
+---
+
 ## 2026-10-05 v0.1.5 RELEASED — Dark mode
 
 - **公開**: Human Gate承認後、`master`をpushし、annotated tag `v0.1.5`をrelease commit `3d467b1f906086536d3a085f0793746caa12bc56`へ作成・push。正式な[GitHub Release v0.1.5](https://github.com/iwadjp/pixel-tag-drawer/releases/tag/v0.1.5)を公開した。
