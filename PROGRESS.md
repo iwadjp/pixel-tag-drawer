@@ -12,7 +12,7 @@ pixel-tag-drawer の公開用進捗ログ。実機確認やマイルストーン
 - Asset: `pixel-tag-drawer-v0.1.6-android.apk`; fresh clean build, package `com.iwadjp.pixeltagdrawer`, version 0.1.6/code 7; existing release certificate `3cae2b8c341174c92a91934b4689527f2ac680150644d2d79bc312c71e1894df`, V2/V3 verified.
 - Public asset SHA-256: `8215454C5B7C8B1465CBC82F304F1CC448FB0C93B63FFC7D15F16B31CE7F6435`. Anonymous download HTTP 200; downloaded bytes/hash/package/version/signature verified. Fresh-build hash differs from the incremental Human RC, with the same source/version/signing identity. Full signature-copy reproduction passes with classic zlib; the local Python zlib-ng checker incompatibility was isolated.
 - Issue #1 reply: https://github.com/iwadjp/pixel-tag-drawer/issues/1#issuecomment-6015099277 ; posted English update about smooth horizontal swipe/one-handed navigation and v0.1.5 dark mode. Issue remains OPEN for feedback.
-- F-Droid metadata read-only: AutoUpdateMode Version / UpdateCheckMode Tags; current metadata 0.1.4/code 5. Tag 0.1.6/code 7, asset filename template and allowed signing key are consistent. No manual metadata/MR changes. F-Droid's detection/build/listing of 0.1.6 is not yet verified.
+- F-Droid metadata read-only: AutoUpdateMode Version / UpdateCheckMode Tags; current metadata 0.1.5/code 6 (fresh raw-file read; earlier web cache showed 0.1.4/code 5). Tag 0.1.6/code 7, asset filename template and allowed signing key are consistent. No manual metadata/MR changes. F-Droid's detection/build/listing of 0.1.6 is not yet verified.
 - Repair the preceding acceptance entry's text encoding in this documentation-only commit; no production source/version/asset changes.
 
 ---
