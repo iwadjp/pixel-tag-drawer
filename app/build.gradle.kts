@@ -14,6 +14,8 @@ android {
         targetSdk = 36
         versionCode = 7
         versionName = "0.1.6"
+        // Temporary Pager diagnosis; only the Human diagnostic APK opts in.
+        buildConfigField("boolean", "PAGER_DIAGNOSTICS", (providers.gradleProperty("pagerDiagnostics").orNull?.toBoolean() ?: false).toString())
     }
 
     buildTypes {

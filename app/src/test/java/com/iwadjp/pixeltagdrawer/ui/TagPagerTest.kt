@@ -35,7 +35,7 @@ class TagPagerTest {
     private var density = 1f
     private var clicks = 0
     private val selections = mutableListOf<Long>()
-    private fun content(grid: Boolean = false, empty: Boolean = false, edges: Boolean = false) {
+    private fun content(grid: Boolean = false, empty: Boolean = false, edges: Boolean = false, itemCount: Int = 100) {
         rule.setContent {
             density = LocalDensity.current.density
             pager = rememberTagPagerState(ids.value, selected.value)
@@ -53,9 +53,9 @@ class TagPagerTest {
                     val id = tag ?: selected.value ?: 10L
                     if (empty) Text("Empty $id", Modifier.fillMaxSize().testTag("page-$id"))
                     else if (grid) LazyVerticalGrid(GridCells.Fixed(4), state = scrolls.grid(id), modifier = Modifier.fillMaxSize()) {
-                        items((0..99).toList()) { Text("$id-$it", Modifier.fillMaxWidth().height(64.dp).clickable { clicks++ }) }
+                        items((0 until itemCount).toList()) { Text("$id-$it", Modifier.fillMaxWidth().height(64.dp).clickable { clicks++ }) }
                     } else LazyColumn(state = scrolls.list(id), modifier = Modifier.fillMaxSize()) {
-                        items((0..99).toList()) { Text("$id-$it", Modifier.fillMaxWidth().height(64.dp).clickable { clicks++ }) }
+                        items((0 until itemCount).toList()) { Text("$id-$it", Modifier.fillMaxWidth().height(64.dp).clickable { clicks++ }) }
                     }
                 }
             }
@@ -180,6 +180,95 @@ class TagPagerTest {
             moveTo(0, Offset(80f, 400f) * density, 500); up(0); up(1)
         }
         rule.waitForIdle(); assertEquals(0, clicks); assertEquals(10L, selected.value)
+    }
+
+    @Test fun immediate_alternating_drags_without_wait_for_idle() {
+        content(empty = true)
+        repeat(6) { index ->
+            rule.onNodeWithTag("pager").performTouchInput {
+                swipe(Offset(if (index % 2 == 0) 320f else 80f, 500f) * density,
+                    Offset(if (index % 2 == 0) 80f else 320f, 440f) * density, 500)
+            }
+            // Advance only enough for snapping, without a waitForIdle barrier.
+            rule.mainClock.advanceTimeBy(500)
+        }
+        rule.waitForIdle(); assertEquals(10L, selected.value)
+        assertEquals(6, selections.size)
+    }
+    @Test fun drag_immediately_after_button_and_external_tag_selection() {
+        content(empty = true)
+        rule.onNodeWithTag("next").performClick()
+        rule.mainClock.advanceTimeBy(500)
+        horizontal(); assertEquals(30L, selected.value)
+        rule.runOnIdle { selected.value = 10L }
+        horizontal(); assertEquals(20L, selected.value)
+    }
+    @Test fun reproduces_no_page_motion_after_vertical_start_in_short_list() {
+        content(itemCount = 3)
+        rule.runOnIdle { PagerDiagnostics.clear() }
+        rule.onNodeWithTag("pager").performTouchInput {
+            down(Offset(320f, 500f) * density)
+            moveTo(Offset(317f, 474f) * density, 40)
+            moveTo(Offset(200f, 465f) * density, 200)
+            moveTo(Offset(80f, 460f) * density, 200)
+            up()
+        }
+        rule.waitForIdle(); assertEquals(10L, selected.value)
+        assertEquals(0f, pager.currentPageOffsetFraction, 0.001f)
+        assertEquals(0, scrolls.list(10L).firstVisibleItemScrollOffset)
+        assertEquals(0, scrolls.grid(10L).firstVisibleItemScrollOffset)
+        if (com.iwadjp.pixeltagdrawer.BuildConfig.PAGER_DIAGNOSTICS) {
+            val report = PagerDiagnostics.report()
+            assertTrue(report.contains("consumedBeforePagerDrag=true"))
+            assertFalse(report.contains("PAGER_DRAG_START"))
+            assertFalse(report.contains("SELECTED_SCROLL_BEGIN"))
+            assertFalse(report.contains("WRAP_SCROLL_BEGIN"))
+            assertFalse(report.contains("RESET_BEGIN"))
+        }
+    }
+    @Test fun reproduces_no_page_motion_after_vertical_start_in_short_grid() {
+        content(grid = true, itemCount = 3)
+        rule.runOnIdle { PagerDiagnostics.clear() }
+        rule.onNodeWithTag("pager").performTouchInput {
+            down(Offset(320f, 500f) * density)
+            moveTo(Offset(317f, 474f) * density, 40)
+            moveTo(Offset(200f, 465f) * density, 200)
+            moveTo(Offset(80f, 460f) * density, 200)
+            up()
+        }
+        rule.waitForIdle(); assertEquals(10L, selected.value)
+        assertEquals(0f, pager.currentPageOffsetFraction, 0.001f)
+        assertEquals(0, scrolls.list(10L).firstVisibleItemScrollOffset)
+        assertEquals(0, scrolls.grid(10L).firstVisibleItemScrollOffset)
+        if (com.iwadjp.pixeltagdrawer.BuildConfig.PAGER_DIAGNOSTICS) {
+            val report = PagerDiagnostics.report()
+            assertTrue(report.contains("consumedBeforePagerDrag=true"))
+            assertFalse(report.contains("PAGER_DRAG_START"))
+            assertFalse(report.contains("SELECTED_SCROLL_BEGIN"))
+            assertFalse(report.contains("WRAP_SCROLL_BEGIN"))
+            assertFalse(report.contains("RESET_BEGIN"))
+        }
+    }
+
+    @Test fun reproduces_previous_cancel_reset_preempting_next_drag() {
+        content(empty = true)
+        rule.mainClock.autoAdvance = false
+        rule.runOnIdle { PagerDiagnostics.clear() }
+        rule.onNodeWithTag("pager").performTouchInput {
+            down(Offset(320f, 400f) * density); moveTo(Offset(300f, 400f) * density, 40); cancel()
+        }
+        rule.onNodeWithTag("pager").performTouchInput {
+            down(Offset(320f, 400f) * density); moveTo(Offset(100f, 400f) * density, 400)
+        }
+        rule.mainClock.advanceTimeBy(32)
+        // Observed defect: finger is still down, but the old reset has stopped this drag.
+        assertFalse(pager.isScrollInProgress)
+        assertEquals(0f, pager.currentPageOffsetFraction, 0.001f)
+        val timeline = PagerDiagnostics.report()
+        rule.onNodeWithTag("pager").performTouchInput { up() }
+        rule.mainClock.autoAdvance = true; rule.waitForIdle()
+        if (com.iwadjp.pixeltagdrawer.BuildConfig.PAGER_DIAGNOSTICS) println("CANCEL_NEXT_DRAG_TIMELINE\n" + timeline)
+        assertEquals(0, clicks)
     }
 
 }

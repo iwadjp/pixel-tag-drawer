@@ -4,6 +4,19 @@ pixel-tag-drawer の公開用進捗ログ。実機確認やマイルストーン
 
 ---
 
+## 2026-10-06 Pager missed-start diagnosis - Human cause UNKNOWN
+
+- `190a766` Human result: smoothness PASS, usability FAIL (drag starts sometimes produce no visible scrolling). Not accepted for release.
+- No Pager threshold/fling/settling/wrap/state-synchronization tuning. Add opt-in `pagerDiagnostics` trace and screen copy route; ordinary builds default off. Temporary diagnostic commit only.
+- Source audit: ordinary recomposition keeps the keyed PagerState; selected ID changes do not recreate it. Normal tag-end wrap is modulo mapping; physical recentering occurs only near the 1,000-cycle virtual boundaries. Only selected-ID synchronization, recentering, button animation and cancellation reset can programmatically move the Pager.
+- Reproduced reset race: previous CANCEL reserves reset; next DOWN/PAGER_DRAG_START occurs before its effect; delayed STOP_SCROLL(PreventUserInput) then PAGER_DRAG_CANCEL stops the new drag. This is a confirmed code defect/model, but not yet attributed to the Human failure. Diagnostics record all effect/request/begin/end/cancel and native/Pager drag lifecycle.
+- Reproduced model: 3-item list/grid, initial dx=-3dp/dy=-26dp then total dx=-240dp/dy=-40dp. Desired adjacent-tag assertions FAIL on `190a766`; no page motion despite final horizontal displacement. Normal immediate alternating, button-followed-by-drag and external-tag-followed-by-drag cases PASS. This model alone does not identify the Human gesture path.
+- Keep observed-failure reproducer tests (not claims of a fix); trace consumed movement before Pager drag plus final displacement to distinguish nested direction arbitration from synchronization/reset/wrap.
+- Verification: diagnostics off relevant 29 tests PASS; reset-race assertion separately PASS without instrumentation. Diagnostic build full 126 / relevant 29 tests PASS (0 failures/errors/skips); lint, assembleDebug, assembleRelease and diff check PASS. Observed-failure assertions document defects, not fixes.
+- Human Gate: clear the screen trace, reproduce a missed start with ordinary single-tag swipes, copy the timeline without adb/USB. Compare short and long list/grid only if naturally available. Version remains 0.1.6/code 7; no publication.
+
+---
+
 ## 2026-10-06 v0.1.6 smooth swipe candidate - Human Gate pending
 
 - Human requested finger-following page transitions before publication. The earlier recognition-only implementation was accepted; this Pager candidate needs new on-device acceptance.

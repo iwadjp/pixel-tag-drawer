@@ -1,6 +1,10 @@
 package com.iwadjp.pixeltagdrawer.ui
 
 import android.view.MotionEvent
+import androidx.compose.foundation.interaction.DragInteraction
+import com.iwadjp.pixeltagdrawer.BuildConfig
+import kotlinx.coroutines.CancellationException
+import java.util.Locale
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.input.pointer.motionEventSpy
 
@@ -59,6 +63,26 @@ internal fun TagPager(
 ) {
     val currentSelected by rememberUpdatedState(selectedId)
     val currentOnSelect by rememberUpdatedState(onSelect)
+    fun trace(event: String, detail: String = "") = PagerDiagnostics.record(event, state, currentSelected, detail)
+    val observedDrag = remember(state) { booleanArrayOf(false) }
+    LaunchedEffect(state) {
+        if (BuildConfig.PAGER_DIAGNOSTICS) {
+            trace("PAGER_INSTANCE", "identity=${System.identityHashCode(state)} pages=${state.pageCount}")
+            state.interactionSource.interactions.collect { interaction ->
+                when (interaction) {
+                    is DragInteraction.Start -> { observedDrag[0] = true; trace("PAGER_DRAG_START") }
+                    is DragInteraction.Stop -> { trace("PAGER_DRAG_STOP"); observedDrag[0] = false }
+                    is DragInteraction.Cancel -> { trace("PAGER_DRAG_CANCEL"); observedDrag[0] = false }
+                }
+            }
+        }
+    }
+    LaunchedEffect(state, ids) {
+        if (BuildConfig.PAGER_DIAGNOSTICS) {
+            snapshotFlow { listOf(state.currentPage, state.settledPage, state.targetPage,
+                state.isScrollInProgress, currentSelected) }.distinctUntilChanged().collect { trace("STATE") }
+        }
+    }
     val density = LocalDensity.current
     val direction = LocalLayoutDirection.current
     val left = gestureInsets.getLeft(density, direction).toFloat()
@@ -70,29 +94,47 @@ internal fun TagPager(
     val pageOnDown = remember(state) { intArrayOf(state.settledPage) }
     var resetPage by remember(state) { mutableStateOf<Int?>(null) }
     LaunchedEffect(state, resetPage) {
+        trace("EFFECT_RESET", "resetPage=$resetPage")
         resetPage?.let {
-            withFrameNanos { }
-            state.stopScroll(MutatePriority.PreventUserInput)
-            state.animateScrollToPage(it)
-            cancelled[0] = false
-            resetPage = null
+            trace("RESET_BEGIN", "destination=$it")
+            try {
+                withFrameNanos { }
+                trace("STOP_SCROLL_BEGIN", "priority=PreventUserInput")
+                state.stopScroll(MutatePriority.PreventUserInput)
+                trace("STOP_SCROLL_END")
+                trace("RESET_ANIMATE_BEGIN", "destination=$it")
+                state.animateScrollToPage(it)
+                trace("RESET_ANIMATE_END")
+                cancelled[0] = false
+                resetPage = null
+            } catch (e: CancellationException) { trace("RESET_CANCEL"); throw e }
         }
     }
     val valid = enabled && selectedId in ids
     LaunchedEffect(state, selectedId, enabled) {
+        trace("EFFECT_SELECTED", "enabled=$enabled valid=$valid")
         if (enabled && selectedId in ids && tagIdAtPage(ids, state.settledPage) != selectedId) {
             // Chip/shortcut selection is external; buttons use animateScrollToPage directly.
-            state.scrollToPage(nearestTagPage(ids, state.currentPage, selectedId!!))
+            val destination = nearestTagPage(ids, state.currentPage, selectedId!!)
+            trace("SELECTED_SCROLL_BEGIN", "destination=$destination")
+            try {
+                state.scrollToPage(destination)
+                trace("SELECTED_SCROLL_END")
+            } catch (e: CancellationException) { trace("SELECTED_SCROLL_CANCEL"); throw e }
         }
     }
     LaunchedEffect(state, ids, valid) {
+        trace("EFFECT_SETTLED", "valid=$valid ids=$ids")
         if (!valid) return@LaunchedEffect
         snapshotFlow { state.isScrollInProgress to state.settledPage }
             .filter { !it.first }.distinctUntilChanged().collect { (_, page) ->
                 val id = tagIdAtPage(ids, page)
-                if (!cancelled[0] && id != currentSelected) currentOnSelect(id)
+                if (!cancelled[0] && id != currentSelected) { trace("SELECT_COMMIT", "destinationTag=$id"); currentOnSelect(id) }
                 if (page < ids.size * 2 || page >= ids.size * (TAG_PAGE_CYCLES - 2)) {
-                    state.scrollToPage(tagPageCenter(ids.size) + Math.floorMod(page, ids.size))
+                    val destination = tagPageCenter(ids.size) + Math.floorMod(page, ids.size)
+                    trace("WRAP_SCROLL_BEGIN", "destination=$destination")
+                    try { state.scrollToPage(destination); trace("WRAP_SCROLL_END") }
+                    catch (e: CancellationException) { trace("WRAP_SCROLL_CANCEL"); throw e }
                 }
             }
     }
@@ -105,26 +147,48 @@ internal fun TagPager(
                 .motionEventSpy { event ->
                     nativeAction[0] = event.actionMasked
                     when (event.actionMasked) {
-                        MotionEvent.ACTION_DOWN -> { cancelled[0] = false; pageOnDown[0] = state.settledPage }
+                        MotionEvent.ACTION_DOWN -> { trace("NATIVE_DOWN"); cancelled[0] = false; pageOnDown[0] = state.settledPage }
+                        MotionEvent.ACTION_UP -> trace("NATIVE_UP")
                         MotionEvent.ACTION_CANCEL, MotionEvent.ACTION_POINTER_DOWN -> {
+                            trace("RESET_REQUEST_NATIVE", "action=${event.actionMasked} destination=${pageOnDown[0]}")
                             cancelled[0] = true
                             resetPage = pageOnDown[0]
                         }
                     }
                 }
+                .then(if (BuildConfig.PAGER_DIAGNOSTICS) Modifier.pointerInput(state) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                        var end = down.position
+                        var consumedBeforeDrag = false
+                        do {
+                            val event = awaitPointerEvent(PointerEventPass.Final)
+                            event.changes.firstOrNull { it.id == down.id }?.let { change ->
+                                end = change.position
+                                if (change.pressed && change.position != change.previousPosition &&
+                                    change.isConsumed && !observedDrag[0]) consumedBeforeDrag = true
+                            }
+                        } while (event.changes.any { it.pressed })
+                        val travel = (end - down.position) / density.density
+                        trace("FINAL_TOUCH", String.format(Locale.ROOT, "dxDp=%.1f dyDp=%.1f consumedBeforePagerDrag=%s", travel.x, travel.y, consumedBeforeDrag))
+                    }
+                } else Modifier)
                 .pointerInput(left, right) {
                     // Guard only horizontal starts in the reserved Back edges. Do not disable
                     // Pager after DOWN (that loses its next gesture); arbitrate before Main.
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
                         val edge = startsInSystemGestureEdge(origin + down.position.x, width.toFloat(), left, right)
+                        trace("GUARD_DOWN", "edge=$edge left=$left right=$right origin=$origin width=$width enabled=$enabled")
                         var block = false
+                        var blockReported = false
                         do {
                             val event = awaitPointerEvent(PointerEventPass.Initial)
                             val change = event.changes.firstOrNull { it.id == down.id }
                             if (change != null) {
                                 if (!change.pressed && nativeAction[0] != MotionEvent.ACTION_UP &&
                                     nativeAction[0] != MotionEvent.ACTION_POINTER_UP) {
+                                    trace("RESET_REQUEST_SYNTHETIC", "nativeAction=${nativeAction[0]} destination=${pageOnDown[0]}")
                                     cancelled[0] = true
                                     resetPage = pageOnDown[0]
                                 }
@@ -133,7 +197,10 @@ internal fun TagPager(
                                     kotlin.math.abs(travel.x) > kotlin.math.abs(travel.y)) block = true
                             }
                             if (event.changes.size > 1) block = true
-                            if (block) event.changes.forEach { it.consume() }
+                            if (block) {
+                                if (!blockReported) { trace("GUARD_BLOCK", "edge=$edge pointers=${event.changes.size}"); blockReported = true }
+                                event.changes.forEach { it.consume() }
+                            }
                         } while (event.changes.any { it.pressed })
                     }
                 },

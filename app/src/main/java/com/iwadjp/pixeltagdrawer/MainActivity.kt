@@ -105,6 +105,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.iwadjp.pixeltagdrawer.ui.adjacentTagId
+import com.iwadjp.pixeltagdrawer.ui.PagerDiagnostics
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import com.iwadjp.pixeltagdrawer.ui.TagPager
 import com.iwadjp.pixeltagdrawer.ui.rememberTagPagerState
 import com.iwadjp.pixeltagdrawer.ui.rememberTagPageScrollStates
@@ -406,6 +409,9 @@ fun AppListScreen(
 
     // バックアップ (Export/Import)。DB/prefsはメインスレッドを塞がずcoroutineScopeで操作する。
     val coroutineScope = rememberCoroutineScope()
+    var showPagerDiagnostics by remember { mutableStateOf(false) }
+    var pagerReport by remember { mutableStateOf("") }
+    val pagerClipboard = LocalClipboardManager.current
     val backupRepository = remember(context) { BackupRepository(context) }
     var backupResultMessage by remember { mutableStateOf<String?>(null) }
     var pendingImportUri by remember { mutableStateOf<Uri?>(null) }
@@ -610,6 +616,11 @@ fun AppListScreen(
                 modifier = Modifier.weight(1f),
             )
             // Mode controls the Edit / Return to list buttons.
+            if (BuildConfig.PAGER_DIAGNOSTICS) {
+                TextButton(onClick = { PagerDiagnostics.record("DIAG_OPEN", tagPagerState, selectedPageId, "selectedCount=${tagState.selectedFilterTagIds.size} bulk=$tagEditMode ids=$pagerTagIds"); pagerReport = PagerDiagnostics.report(); showPagerDiagnostics = true }) {
+                    Text("Pager diag")
+                }
+            }
             when (uiMode) {
                 ShortcutUiMode.Simplified -> {
                     TextButton(onClick = {
@@ -658,6 +669,18 @@ fun AppListScreen(
             }
         }
 
+        if (BuildConfig.PAGER_DIAGNOSTICS && showPagerDiagnostics) {
+            AlertDialog(onDismissRequest = { showPagerDiagnostics = false },
+                title = { Text("Pager diagnostics") },
+                text = { Text(pagerReport, modifier = Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()), style = MaterialTheme.typography.labelSmall) },
+                confirmButton = { TextButton(onClick = { pagerClipboard.setText(AnnotatedString(pagerReport)) }) { Text("Copy") } },
+                dismissButton = { Row {
+                    TextButton(onClick = { PagerDiagnostics.clear(); pagerReport = PagerDiagnostics.report() }) { Text("Clear") }
+                    TextButton(onClick = { pagerReport = PagerDiagnostics.report() }) { Text("Reload") }
+                    TextButton(onClick = { showPagerDiagnostics = false }) { Text("Close") }
+                } },
+            )
+        }
         if (showPrivacyPolicy) {
             PrivacyPolicyDialog(onDismiss = { showPrivacyPolicy = false })
         }
@@ -794,7 +817,14 @@ fun AppListScreen(
                 delta = delta,
             )
             if (nextId != null && !tagEditMode) {
-                coroutineScope.launch { tagPagerState.animateScrollToPage(tagPagerState.currentPage + delta) }
+                coroutineScope.launch {
+                    PagerDiagnostics.record("BUTTON_ANIMATE_BEGIN", tagPagerState, selectedPageId, "delta=$delta")
+                    try { tagPagerState.animateScrollToPage(tagPagerState.currentPage + delta)
+                        PagerDiagnostics.record("BUTTON_ANIMATE_END", tagPagerState, selectedPageId)
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        PagerDiagnostics.record("BUTTON_ANIMATE_CANCEL", tagPagerState, selectedPageId); throw e
+                    }
+                }
             } else if (nextId != null) {
                 PerfLog.log("[LM] tag nav delta=$delta tagId=$nextId")
                 tagViewModel.selectSingleFilterTag(nextId)
