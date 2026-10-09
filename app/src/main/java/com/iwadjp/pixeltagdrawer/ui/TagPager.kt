@@ -64,7 +64,10 @@ internal fun rememberTagPagerState(ids: List<Long>, selectedId: Long?): PagerSta
     }
 }
 
-/** The selected tag commits only at rest; pages render their own tag during a drag. */
+/**
+ * The selected tag follows the page nearest the viewport (currentPage flips at the halfway point),
+ * so the chip highlight changes together with the visible page instead of after settling.
+ */
 @Composable
 @OptIn(ExperimentalComposeUiApi::class)
 internal fun TagPager(
@@ -87,12 +90,19 @@ internal fun TagPager(
     val navigationScope = rememberCoroutineScope()
     val valid = enabled && selectedId in ids
     LaunchedEffect(state, selectedId, enabled) {
-        if (enabled && selectedId in ids && tagIdAtPage(ids, state.settledPage) != selectedId) {
+        if (enabled && selectedId in ids && tagIdAtPage(ids, state.currentPage) != selectedId) {
             // Chip/shortcut selection is external; buttons use animateScrollToPage directly.
             val destination = nearestTagPage(ids, state.currentPage, selectedId!!)
             try {
                 state.scrollToPage(destination)
             } catch (e: CancellationException) { throw e }
+        }
+    }
+    LaunchedEffect(state, ids, valid) {
+        if (!valid) return@LaunchedEffect
+        snapshotFlow { state.currentPage }.distinctUntilChanged().collect { page ->
+            val id = tagIdAtPage(ids, page)
+            if (id != currentSelected) currentOnSelect(id)
         }
     }
     LaunchedEffect(state, ids, valid) {

@@ -125,6 +125,19 @@ class TagPagerTest {
         rule.mainClock.autoAdvance = true; rule.waitForIdle()
         assertEquals(10L, selected.value); assertEquals(0f, pager.currentPageOffsetFraction, 0.001f)
     }
+    @Test fun selection_follows_page_past_halfway_before_release_and_reverts_when_dragged_back() {
+        content(empty = true)
+        rule.mainClock.autoAdvance = false
+        rule.onNodeWithTag("pager").performTouchInput { down(Offset(380f, 400f) * density); moveTo(Offset(100f, 400f) * density, 500) }
+        rule.mainClock.advanceTimeByFrame(); rule.mainClock.advanceTimeByFrame()
+        rule.runOnIdle { assertTrue(pager.isScrollInProgress); assertEquals(20L, selected.value) }
+        rule.onNodeWithTag("pager").performTouchInput { moveTo(Offset(370f, 400f) * density, 500) }
+        rule.mainClock.advanceTimeByFrame(); rule.mainClock.advanceTimeByFrame()
+        rule.runOnIdle { assertEquals(10L, selected.value) }
+        rule.onNodeWithTag("pager").performTouchInput { up() }
+        rule.mainClock.autoAdvance = true; rule.waitForIdle()
+        assertEquals(10L, selected.value)
+    }
     @Test fun quick_fling_can_settle_an_adjacent_page() {
         content(empty = true)
         rule.onNodeWithTag("pager").performTouchInput { swipe(Offset(280f, 400f) * density, Offset(160f, 400f) * density, 80) }
