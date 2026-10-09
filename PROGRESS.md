@@ -4,6 +4,17 @@ pixel-tag-drawer の公開用進捗ログ。実機確認やマイルストーン
 
 ---
 
+## 2026-10-09 Horizontal flip selection sync - Human acceptance
+
+- Feedback: on the tag selection screen, a horizontal flip switched the displayed tag but the selection highlight followed a beat later.
+- Cause: the selected tag was committed only after the Pager came to rest (scroll finished and `settledPage` fixed), so the highlight waited for the fling/snap animation to end.
+- Fix `04d5074`: `TagPager` now follows `currentPage` and updates the selected tag when the page crosses the halfway point, so the highlight changes together with the visible page. External (chip/shortcut) selection sync compares against `currentPage` so it cannot hijack an in-progress drag. A cancelled or dragged-back gesture returns the selection with the page. The existing selection/save path (`selectSingleFilterTag`) is unchanged; only `TagPager.kt` and `TagPagerTest.kt` changed.
+- Verification: 138 unit tests PASS (137 existing + 1 new test for selection before release and revert on drag-back; 0 failures/errors/skips).
+- Device: Release APK (v0.1.6 / code 7, same signing certificate) installed via SafeDrop; Human device test **PASS**. Verdict: **ACCEPTED**.
+- Version remains 0.1.6 / code 7. Not pushed, tagged or released; whether and when to publish this fix is a separate decision.
+
+---
+
 ## 2026-10-06 v0.1.6 published
 
 - Human final RC acceptance: **PASS**, "test ok". Publish the accepted implementation without gesture changes.
