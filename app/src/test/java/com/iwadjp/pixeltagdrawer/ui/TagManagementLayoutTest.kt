@@ -2,6 +2,11 @@ package com.iwadjp.pixeltagdrawer.ui
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.test.getBoundsInRoot
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.assertHasClickAction
@@ -9,6 +14,9 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onLast
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ApplicationProvider
 import com.iwadjp.pixeltagdrawer.R
@@ -182,4 +190,81 @@ class TagManagementLayoutTest {
         composeRule.onNodeWithText(exitBarLabel()).assertIsDisplayed().performClick()
         assert(exited) { "exit bar was not reachable/clickable while the tag panel was tall" }
     }
+
+    // Issue #2: 操作ボタンが1行に並ぶとタグ名の幅が残りわずかになり、1文字ずつ折り返されていた。
+    // 指定の画面幅・フォント倍率でタグ名が操作ボタンに幅を奪われないことを確認する。
+    private fun assertTagNameKeepsWidth(widthDp: Int, fontScale: Float) {
+        val name = "Open-source"
+        composeRule.setContent {
+            val base = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(base.density, fontScale)) {
+                Column(modifier = Modifier.width(widthDp.dp)) {
+                    TagSection(
+                        modifier = Modifier,
+                        state = TagUiState(
+                            tags = listOf(TagEntity(tagId = 1L, name = name, sortOrder = 1)),
+                        ),
+                        shortcutMessage = null,
+                        onNameChange = {},
+                        onCreate = {},
+                        onDelete = {},
+                        onStartRename = {},
+                        onMoveUp = {},
+                        onMoveDown = {},
+                        onEditingNameChange = {},
+                        onEditingDisplayLabelChange = {},
+                        onConfirmRename = {},
+                        onCancelRename = {},
+                        onPinTag = {},
+                        onPinUntagged = {},
+                        onStartEditUntagged = {},
+                        onEditingUntaggedLabelChange = {},
+                        onConfirmUntaggedLabel = {},
+                        onCancelEditUntaggedLabel = {},
+                    )
+                }
+            }
+        }
+        val nameNode = composeRule.onNodeWithText("# $name")
+        val ctx = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val nameBounds = nameNode.getBoundsInRoot()
+        // 「Change」は Untagged 行にもあるため、タグ行 (最後) のボタンを対象にする。
+        // 操作ボタンはタグ名と同じ行ではなく、タグ名より下の段に置かれていること。
+        // 同じ行に並ぶ旧レイアウトでは、ボタンの上端がタグ名の下端より上にくる (幅を奪い合う)。
+        // (Robolectric ではテキスト幅が実機と異なるため、幅ではなく段の位置関係で判定する)
+        for (res in listOf(
+            R.string.pin_tag_to_home_button,
+            R.string.action_rename,
+            R.string.action_delete,
+        )) {
+            val b = composeRule.onAllNodesWithText(ctx.getString(res)).onLast().getBoundsInRoot()
+            assert(b.top >= nameBounds.bottom) {
+                "'${ctx.getString(res)}' (top=${b.top}) shares a row with the tag name (bottom=${nameBounds.bottom}) at ${widthDp}dp, fontScale=$fontScale"
+            }
+            // 画面幅の外にはみ出していないこと
+            assert(b.right.value <= widthDp) { "'${ctx.getString(res)}' overflows ${widthDp}dp: right=${b.right}" }
+        }
+        // 全操作ボタンがスクロールで到達できること
+        for (res in listOf(
+            R.string.pin_tag_to_home_button,
+            R.string.action_rename,
+            R.string.action_delete,
+        )) {
+            composeRule.onAllNodesWithText(ctx.getString(res)).onLast().performScrollTo().assertIsDisplayed().assertHasClickAction()
+        }
+        composeRule.onNodeWithContentDescription(ctx.getString(R.string.content_desc_move_up)).assertExists()
+        composeRule.onNodeWithContentDescription(ctx.getString(R.string.content_desc_move_down)).assertExists()
+    }
+
+    @Test
+    fun `tag name keeps width on 320dp screen`() = assertTagNameKeepsWidth(320, 1f)
+
+    @Test
+    fun `tag name keeps width on 360dp screen`() = assertTagNameKeepsWidth(360, 1f)
+
+    @Test
+    fun `tag name keeps width on 360dp screen with large font`() = assertTagNameKeepsWidth(360, 1.5f)
+
+    @Test
+    fun `tag name keeps width on 320dp screen with largest font`() = assertTagNameKeepsWidth(320, 2f)
 }

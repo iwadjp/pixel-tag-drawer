@@ -34,6 +34,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -1487,6 +1489,7 @@ internal fun TagManagementExitBar(onExit: () -> Unit, modifier: Modifier = Modif
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun TagSection(
     modifier: Modifier = Modifier,
@@ -1674,12 +1677,10 @@ internal fun TagSection(
                         }
                     }
                 } else {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
+                    // タグ名・表示名は1段目に全幅で置き、操作ボタンは2段目へ分ける。
+                    // 1行に並べると狭い画面やフォント拡大時にタグ名が1文字ずつ折り返されるため (Issue #2)。
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.fillMaxWidth()) {
                             Text(
                                 text = "# ${tag.name}",
                                 style = MaterialTheme.typography.bodyMedium,
@@ -1693,34 +1694,41 @@ internal fun TagSection(
                                 )
                             }
                         }
-                        // ▲▼ で表示順を1つずつ移動する。先頭の▲・末尾の▼は無効。
-                        IconButton(
-                            onClick = { onMoveUp(tag) },
-                            enabled = index > 0,
-                            modifier = Modifier
-                                .size(32.dp)
-                                .semantics { contentDescription = contentDescMoveUp },
+                        FlowRow(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(0.dp, Alignment.End),
+                            verticalArrangement = Arrangement.Center,
+                            itemVerticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Text("▲", style = MaterialTheme.typography.labelLarge)
-                        }
-                        IconButton(
-                            onClick = { onMoveDown(tag) },
-                            enabled = index < state.tags.lastIndex,
-                            modifier = Modifier
-                                .size(32.dp)
-                                .semantics { contentDescription = contentDescMoveDown },
-                        ) {
-                            Text("▼", style = MaterialTheme.typography.labelLarge)
-                        }
-                        // 控えめなテキストボタン。誤操作を避けるため小さめに留める
-                        TextButton(onClick = { onPinTag(tag) }) {
-                            Text(stringResource(R.string.pin_tag_to_home_button))
-                        }
-                        TextButton(onClick = { onStartRename(tag) }) {
-                            Text(stringResource(R.string.action_rename))
-                        }
-                        TextButton(onClick = { onDelete(tag) }) {
-                            Text(stringResource(R.string.action_delete))
+                            // ▲▼ で表示順を1つずつ移動する。先頭の▲・末尾の▼は無効。
+                            IconButton(
+                                onClick = { onMoveUp(tag) },
+                                enabled = index > 0,
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .semantics { contentDescription = contentDescMoveUp },
+                            ) {
+                                Text("▲", style = MaterialTheme.typography.labelLarge)
+                            }
+                            IconButton(
+                                onClick = { onMoveDown(tag) },
+                                enabled = index < state.tags.lastIndex,
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .semantics { contentDescription = contentDescMoveDown },
+                            ) {
+                                Text("▼", style = MaterialTheme.typography.labelLarge)
+                            }
+                            // 控えめなテキストボタン。誤操作を避けるため小さめに留める
+                            TextButton(onClick = { onPinTag(tag) }) {
+                                Text(stringResource(R.string.pin_tag_to_home_button))
+                            }
+                            TextButton(onClick = { onStartRename(tag) }) {
+                                Text(stringResource(R.string.action_rename))
+                            }
+                            TextButton(onClick = { onDelete(tag) }) {
+                                Text(stringResource(R.string.action_delete))
+                            }
                         }
                     }
                 }
