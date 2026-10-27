@@ -11,7 +11,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performScrollTo
 import androidx.lifecycle.ViewModelStore
 import androidx.room.Room
@@ -106,14 +109,37 @@ class DeletedTagFilterTest {
     }
 
     @Test
-    fun deletedManualFilterDoesNotHideAppsOnNormalRelaunch() {
+    fun tagManagementHidesAppSearchAndListUntilExited() {
         createTag("Work")
         prefs.showTagManagement = true
         startScreen()
         awaitTagCount(1)
-        composeRule.onNodeWithText("Work").performClick()
-        composeRule.onNodeWithText(application.getString(R.string.action_delete))
-            .performScrollTo().performClick()
+        val searchHint = application.getString(R.string.search_hint)
+        // Management is its own screen: no app search, no app list, no list/grid or sort controls.
+        composeRule.onAllNodesWithText(searchHint).assertCountEquals(0)
+        composeRule.onAllNodesWithText("Example app").assertCountEquals(0)
+        composeRule.onAllNodesWithText(application.getString(R.string.display_mode_list)).assertCountEquals(0)
+        composeRule.onNodeWithText("# Work").assertIsDisplayed()
+
+        composeRule.onNodeWithText(application.getString(R.string.tag_management_exit_button)).performClick()
+
+        // The list and the search field come back as they were.
+        composeRule.onNodeWithText("Example app").assertIsDisplayed()
+        composeRule.onNodeWithText(searchHint).assertIsDisplayed()
+    }
+
+    @Test
+    fun deletedManualFilterDoesNotHideAppsOnNormalRelaunch() {
+        val work = createTag("Work")
+        // The filter chips are hidden while tag management is open, so the manual filter is saved up front.
+        prefs.saveFilterTagIds(setOf(work))
+        prefs.showTagManagement = true
+        startScreen()
+        awaitTagCount(1)
+        composeRule.onNodeWithContentDescription(
+            application.getString(R.string.content_desc_tag_actions_format, "Work"),
+        ).performClick()
+        composeRule.onNodeWithText(application.getString(R.string.action_delete)).performClick()
         awaitTagCount(0)
         composeRule.onNodeWithText(application.getString(R.string.tag_management_exit_button)).performClick()
         composeRule.onNodeWithText("Example app").assertIsDisplayed()

@@ -70,6 +70,10 @@
     <string name="content_desc_move_down">Move down</string>
     <string name="pin_tag_to_home_button">Home</string>
     <string name="action_delete">Delete</string>
+    <string name="tag_reorder_start">Reorder</string>
+    <string name="tag_reorder_done">Done</string>
+    <string name="tag_reorder_hint">Move tags one step at a time with ▲▼. Untagged stays first.</string>
+    <string name="content_desc_tag_actions_format">More actions for %1$s</string>
     <string name="tag_colon_label">Tags:</string>
     <string name="untagged_label">Untagged</string>
     <string name="filter_clear_button">Clear</string>

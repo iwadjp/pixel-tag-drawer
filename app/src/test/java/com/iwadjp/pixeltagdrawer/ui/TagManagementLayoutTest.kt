@@ -4,8 +4,16 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.getBoundsInRoot
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -191,80 +199,231 @@ class TagManagementLayoutTest {
         assert(exited) { "exit bar was not reachable/clickable while the tag panel was tall" }
     }
 
-    // Issue #2: 操作ボタンが1行に並ぶとタグ名の幅が残りわずかになり、1文字ずつ折り返されていた。
-    // 指定の画面幅・フォント倍率でタグ名が操作ボタンに幅を奪われないことを確認する。
-    private fun assertTagNameKeepsWidth(widthDp: Int, fontScale: Float) {
-        val name = "Open-source"
+    // ---- Issue #2: コンパクトな1段行 + 並べ替えモード ----
+
+    private val ctx get() = ApplicationProvider.getApplicationContext<android.content.Context>()
+
+    private class Calls {
+        val pinned = mutableListOf<Long>()
+        val renamed = mutableListOf<Long>()
+        val deleted = mutableListOf<Long>()
+        val movedUp = mutableListOf<Long>()
+        val movedDown = mutableListOf<Long>()
+    }
+
+    private fun setSection(
+        state: TagUiState,
+        calls: Calls = Calls(),
+        widthDp: Int = 360,
+        fontScale: Float = 1f,
+        startInReorder: Boolean = false,
+    ) {
         composeRule.setContent {
             val base = LocalDensity.current
+            var reorder by remember { mutableStateOf(startInReorder) }
             CompositionLocalProvider(LocalDensity provides Density(base.density, fontScale)) {
-                Column(modifier = Modifier.width(widthDp.dp)) {
+                Column(modifier = Modifier.width(widthDp.dp).height(900.dp)) {
                     TagSection(
                         modifier = Modifier,
-                        state = TagUiState(
-                            tags = listOf(TagEntity(tagId = 1L, name = name, sortOrder = 1)),
-                        ),
+                        state = state,
                         shortcutMessage = null,
                         onNameChange = {},
                         onCreate = {},
-                        onDelete = {},
-                        onStartRename = {},
-                        onMoveUp = {},
-                        onMoveDown = {},
+                        onDelete = { calls.deleted += it.tagId },
+                        onStartRename = { calls.renamed += it.tagId },
+                        onMoveUp = { calls.movedUp += it.tagId },
+                        onMoveDown = { calls.movedDown += it.tagId },
                         onEditingNameChange = {},
                         onEditingDisplayLabelChange = {},
                         onConfirmRename = {},
                         onCancelRename = {},
-                        onPinTag = {},
+                        onPinTag = { calls.pinned += it.tagId },
                         onPinUntagged = {},
                         onStartEditUntagged = {},
                         onEditingUntaggedLabelChange = {},
                         onConfirmUntaggedLabel = {},
                         onCancelEditUntaggedLabel = {},
+                        reorderMode = reorder,
+                        onReorderModeChange = { reorder = it },
                     )
                 }
             }
         }
-        val nameNode = composeRule.onNodeWithText("# $name")
-        val ctx = ApplicationProvider.getApplicationContext<android.content.Context>()
-        val nameBounds = nameNode.getBoundsInRoot()
-        // 「Change」は Untagged 行にもあるため、タグ行 (最後) のボタンを対象にする。
-        // 操作ボタンはタグ名と同じ行ではなく、タグ名より下の段に置かれていること。
-        // 同じ行に並ぶ旧レイアウトでは、ボタンの上端がタグ名の下端より上にくる (幅を奪い合う)。
-        // (Robolectric ではテキスト幅が実機と異なるため、幅ではなく段の位置関係で判定する)
-        for (res in listOf(
-            R.string.pin_tag_to_home_button,
-            R.string.action_rename,
-            R.string.action_delete,
-        )) {
-            val b = composeRule.onAllNodesWithText(ctx.getString(res)).onLast().getBoundsInRoot()
-            assert(b.top >= nameBounds.bottom) {
-                "'${ctx.getString(res)}' (top=${b.top}) shares a row with the tag name (bottom=${nameBounds.bottom}) at ${widthDp}dp, fontScale=$fontScale"
-            }
-            // 画面幅の外にはみ出していないこと
-            assert(b.right.value <= widthDp) { "'${ctx.getString(res)}' overflows ${widthDp}dp: right=${b.right}" }
-        }
-        // 全操作ボタンがスクロールで到達できること
-        for (res in listOf(
-            R.string.pin_tag_to_home_button,
-            R.string.action_rename,
-            R.string.action_delete,
-        )) {
-            composeRule.onAllNodesWithText(ctx.getString(res)).onLast().performScrollTo().assertIsDisplayed().assertHasClickAction()
-        }
-        composeRule.onNodeWithContentDescription(ctx.getString(R.string.content_desc_move_up)).assertExists()
-        composeRule.onNodeWithContentDescription(ctx.getString(R.string.content_desc_move_down)).assertExists()
+    }
+
+    private fun home() = ctx.getString(R.string.pin_tag_to_home_button)
+    private fun change() = ctx.getString(R.string.action_rename)
+    private fun delete() = ctx.getString(R.string.action_delete)
+    private fun reorderStart() = ctx.getString(R.string.tag_reorder_start)
+    private fun reorderDone() = ctx.getString(R.string.tag_reorder_done)
+    private fun moreActions(name: String) = ctx.getString(R.string.content_desc_tag_actions_format, name)
+
+    @Test
+    fun `normal mode shows a compact single row with Home and the more menu only`() {
+        setSection(TagUiState(tags = tags(3)))
+
+        val name1 = composeRule.onNodeWithText("# タグ1").getBoundsInRoot()
+        val name2 = composeRule.onNodeWithText("# タグ2").getBoundsInRoot()
+        val home1 = composeRule.onAllNodesWithText(home())[0].getBoundsInRoot()
+        val more1 = composeRule.onNodeWithContentDescription(moreActions("タグ1")).getBoundsInRoot()
+
+        // Home と ⋮ はタグ名と同じ行 (縦方向に重なる) にあり、名前の右側に並ぶ。
+        assert(home1.top < name1.bottom) { "Home is not on the name row: home=$home1 name=$name1" }
+        assert(more1.top < name1.bottom) { "more menu is not on the name row: more=$more1 name=$name1" }
+        assert(home1.left >= name1.right && more1.left >= home1.right) { "order broken: $name1 $home1 $more1" }
+        // 1行の高さは 56dp 前後 (固定高ではなく最小 56dp。短い名前なら伸びない)
+        val pitch = name2.top - name1.top
+        assert(pitch.value in 56f..64f) { "row pitch $pitch is not about 56dp" }
+        // ⋮ のタップ領域は 48dp 以上
+        assert((more1.right - more1.left).value >= 48f && (more1.bottom - more1.top).value >= 48f)
+        // 通常時は ▲▼・変更・削除を常時表示しない
+        composeRule.onAllNodesWithContentDescription(ctx.getString(R.string.content_desc_move_up)).assertCountEquals(0)
+        composeRule.onAllNodesWithContentDescription(ctx.getString(R.string.content_desc_move_down)).assertCountEquals(0)
+        composeRule.onNodeWithText(delete()).assertDoesNotExist()
     }
 
     @Test
-    fun `tag name keeps width on 320dp screen`() = assertTagNameKeepsWidth(320, 1f)
+    fun `Home button requests a pin for that tag`() {
+        val calls = Calls()
+        setSection(TagUiState(tags = tags(3)), calls)
+
+        composeRule.onAllNodesWithText(home())[1].performClick()
+
+        assert(calls.pinned == listOf(2L)) { "pinned=${calls.pinned}" }
+    }
 
     @Test
-    fun `tag name keeps width on 360dp screen`() = assertTagNameKeepsWidth(360, 1f)
+    fun `more menu offers Change and Delete`() {
+        val calls = Calls()
+        setSection(TagUiState(tags = tags(3)), calls)
+
+        composeRule.onNodeWithContentDescription(moreActions("タグ2")).performClick()
+        composeRule.onNodeWithText(delete()).assertIsDisplayed()
+        composeRule.onNodeWithText(delete()).performClick()
+        assert(calls.deleted == listOf(2L)) { "deleted=${calls.deleted}" }
+        // 削除は従来どおり確認なしで実行される (新しい確認手順は追加しない)
+        assert(calls.renamed.isEmpty())
+
+        composeRule.onNodeWithContentDescription(moreActions("タグ3")).performClick()
+        // タグなし行の「変更」ボタンとは別に、メニュー内の「変更」が最後に現れる
+        composeRule.onAllNodesWithText(change()).onLast().performClick()
+        assert(calls.renamed == listOf(3L)) { "renamed=${calls.renamed}" }
+        composeRule.onNodeWithText(delete()).assertDoesNotExist()
+    }
 
     @Test
-    fun `tag name keeps width on 360dp screen with large font`() = assertTagNameKeepsWidth(360, 1.5f)
+    fun `reorder mode shows name with up and down only and can be left`() {
+        val calls = Calls()
+        setSection(TagUiState(tags = tags(3)), calls)
+
+        composeRule.onNodeWithText(reorderStart()).performClick()
+
+        composeRule.onNodeWithText(reorderDone()).assertIsDisplayed()
+        composeRule.onAllNodesWithText(home()).assertCountEquals(0)
+        composeRule.onAllNodesWithContentDescription(moreActions("タグ1")).assertCountEquals(0)
+        composeRule.onAllNodesWithText(delete()).assertCountEquals(0)
+
+        val up = ctx.getString(R.string.content_desc_move_up)
+        val down = ctx.getString(R.string.content_desc_move_down)
+        val ups = composeRule.onAllNodesWithContentDescription(up)
+        val downs = composeRule.onAllNodesWithContentDescription(down)
+        ups.assertCountEquals(3)
+        downs.assertCountEquals(3)
+        // 先頭の▲と末尾の▼は無効のまま
+        ups[0].assertIsNotEnabled()
+        ups[1].assertIsEnabled()
+        downs[1].assertIsEnabled()
+        downs[2].assertIsNotEnabled()
+
+        downs[0].performClick()
+        ups[2].performClick()
+        assert(calls.movedDown == listOf(1L)) { "movedDown=${calls.movedDown}" }
+        assert(calls.movedUp == listOf(3L)) { "movedUp=${calls.movedUp}" }
+
+        composeRule.onNodeWithText(reorderDone()).performClick()
+        composeRule.onAllNodesWithText(home()).assertCountEquals(3)
+        composeRule.onAllNodesWithContentDescription(up).assertCountEquals(0)
+    }
 
     @Test
-    fun `tag name keeps width on 320dp screen with largest font`() = assertTagNameKeepsWidth(320, 2f)
+    fun `reorder row keeps up and down on the name row`() {
+        setSection(TagUiState(tags = tags(3)), startInReorder = true)
+
+        val name = composeRule.onNodeWithText("# タグ1").getBoundsInRoot()
+        val up = composeRule.onAllNodesWithContentDescription(ctx.getString(R.string.content_desc_move_up))[0].getBoundsInRoot()
+        assert(up.top < name.bottom && up.left >= name.right) { "up=$up name=$name" }
+        assert((up.right - up.left).value >= 48f && (up.bottom - up.top).value >= 48f)
+    }
+
+    @Test
+    fun `reorder toggle is disabled while a tag name is being edited`() {
+        val tag = tags(3)[0]
+        setSection(TagUiState(tags = tags(3), editingTag = tag, editingTagName = "編集中"))
+
+        composeRule.onNodeWithText(reorderStart()).assertIsNotEnabled()
+    }
+
+    @Test
+    fun `reorder toggle is unavailable with a single tag`() {
+        setSection(TagUiState(tags = tags(1)))
+
+        composeRule.onNodeWithText(reorderStart()).assertIsNotEnabled()
+    }
+
+    @Test
+    fun `add-tag input is hidden while reordering`() {
+        setSection(TagUiState(tags = tags(2)))
+        composeRule.onNodeWithText(ctx.getString(R.string.add_tag_button)).assertIsDisplayed()
+
+        composeRule.onNodeWithText(reorderStart()).performClick()
+
+        composeRule.onNodeWithText(ctx.getString(R.string.add_tag_button)).assertDoesNotExist()
+    }
+
+    private fun assertRowsUsable(widthDp: Int, fontScale: Float, tagCount: Int) {
+        val longName = "SuperLongTagNameWithoutAnySpaces"
+        val list = (1..tagCount).map {
+            TagEntity(tagId = it.toLong(), name = if (it == 1) longName else "タグ$it", sortOrder = it)
+        }
+        setSection(TagUiState(tags = list), widthDp = widthDp, fontScale = fontScale)
+
+        val label = "widthDp=$widthDp fontScale=$fontScale tags=$tagCount"
+        val homes = composeRule.onAllNodesWithText(home())
+        homes.assertCountEquals(tagCount)
+        for (i in 0 until tagCount) {
+            val h = homes[i].performScrollTo()
+            h.assertIsDisplayed().assertHasClickAction()
+            val b = h.getBoundsInRoot()
+            assert(b.right.value <= widthDp) { "Home overflows ($label): $b" }
+        }
+        val more = composeRule.onNodeWithContentDescription(moreActions(longName))
+        more.performScrollTo().assertIsDisplayed().assertHasClickAction()
+        val mb = more.getBoundsInRoot()
+        assert(mb.right.value <= widthDp) { "more menu overflows ($label): $mb" }
+        assert((mb.right - mb.left).value >= 48f) { "tap target too small ($label): $mb" }
+        // 長い名前でも ⋮ メニューから変更・削除に到達できる
+        more.performClick()
+        composeRule.onNodeWithText(delete()).assertIsDisplayed()
+    }
+
+    @Test
+    fun `rows stay usable at 320dp and 360dp with font scales up to 2x`() {
+        // setContent は1テストで1回しか呼べないため、組み合わせごとにテストを分ける
+        assertRowsUsable(320, 1f, 17)
+    }
+
+    @Test
+    fun `rows usable 320dp 1_5x`() = assertRowsUsable(320, 1.5f, 17)
+
+    @Test
+    fun `rows usable 320dp 2x`() = assertRowsUsable(320, 2f, 17)
+
+    @Test
+    fun `rows usable 360dp 1x`() = assertRowsUsable(360, 1f, 17)
+
+    @Test
+    fun `rows usable 360dp 1_5x`() = assertRowsUsable(360, 1.5f, 17)
+
+    @Test
+    fun `rows usable 360dp 2x`() = assertRowsUsable(360, 2f, 17)
 }

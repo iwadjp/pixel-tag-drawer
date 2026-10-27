@@ -152,8 +152,11 @@ class DeletedBulkTagTest {
     fun deletingBulkTargetCannotPersistInvisibleAssignmentAfterRestart() {
         selectBulkTarget()
         menu(R.string.tag_management_open)
-        composeRule.onAllNodesWithText(application.getString(R.string.action_delete))[0]
-            .performScrollTo().performClick()
+        // Tag management is its own screen now: delete goes through the row's more (⋮) menu.
+        composeRule.onNodeWithContentDescription(
+            application.getString(R.string.content_desc_tag_actions_format, "Work"),
+        ).performClick()
+        clickText(R.string.action_delete)
         awaitLoaded(1)
         clickText(R.string.tag_management_exit_button)
         clickText(R.string.bulk_assign_button)

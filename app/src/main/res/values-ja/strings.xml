@@ -70,6 +70,10 @@
     <string name="content_desc_move_down">下へ移動</string>
     <string name="pin_tag_to_home_button">ホーム</string>
     <string name="action_delete">削除</string>
+    <string name="tag_reorder_start">並べ替え</string>
+    <string name="tag_reorder_done">完了</string>
+    <string name="tag_reorder_hint">▲▼で1つずつ移動 · タグなしは先頭固定</string>
+    <string name="content_desc_tag_actions_format">%1$s のその他の操作</string>
     <string name="tag_colon_label">タグ:</string>
     <string name="untagged_label">タグなし</string>
     <string name="filter_clear_button">解除</string>

@@ -16,6 +16,7 @@ import android.os.Bundle
 import android.provider.Settings
 import android.util.Log
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -34,8 +35,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -87,6 +86,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
@@ -452,6 +452,9 @@ fun AppListScreen(
     // タグ管理UI (作成/変更/削除) の開閉。前回値を復元し、変更時に保存する。
     var showTagManagement by remember { mutableStateOf(prefs.showTagManagement) }
     LaunchedEffect(showTagManagement) { prefs.showTagManagement = showTagManagement }
+    // タグ管理の並べ替えモード。管理を閉じたら必ず通常モードへ戻す。
+    var tagReorderMode by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(showTagManagement) { if (!showTagManagement) tagReorderMode = false }
 
     // タグ編集モード。ON のときだけアプリ行/セルに「タグ」ボタンを出す。
     // 誤操作防止のため永続化せず、起動時は必ず OFF。
@@ -475,6 +478,7 @@ fun AppListScreen(
     }
     // 簡素モード (編集系UIを隠す) かどうか。表示条件はすべてこのモードに基づき一意に決める。
     val simplified = uiMode == ShortcutUiMode.Simplified
+    val tagManagementVisible = showTagManagement && !simplified
 
     // モード遷移時に編集系の一時stateを畳む共通処理 (フィルタ・検索は触らない)。
     val foldEditing: () -> Unit = {
@@ -576,18 +580,9 @@ fun AppListScreen(
     // 操作エリア (タイトル/タグ/検索/件数) は固定し、アプリ一覧だけをスクロールさせる。
     // そのため全体は Column、一覧部分のみ weight(1f) を持つ LazyColumn にする。
     //
-    // タグ管理パネル (TagSection) は weight で一覧側と比率を取り合わせない。
-    // weight(1f, fill=false) 同士の比率制御は、画面上の他の固定要素 (検索欄・件数/並び替え行・
-    // 終了フッターなど) が消費する分だけ「残り空間」が実機では想定より小さくなり、
-    // パネルがほぼ潰れる不具合を引き起こしたため撤回した。代わりに BoxWithConstraints で
-    // 実際に使える画面高を取得し、その割合から TagSection 専用の上限高さを直接計算する
-    // (heightIn(max=...) で自己完結させ、アプリ一覧の weight(1f) とは競合させない)。
-    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        // 画面高の60%を上限にしつつ、極端に小さい/大きい画面でも破綻しないよう下限・上限で挟む。
-        // 下限 220dp: タグ追加欄+ホーム追加行+タグ数行程度は最低限スクロールなしで見える高さ。
-        // 上限 560dp: タブレット等で画面高に余裕があっても、検索・アプリ一覧・終了ボタン側の
-        // 最低限の表示領域を必ず残す。
-        val tagSectionMaxHeight = (maxHeight * 0.6f).coerceIn(220.dp, 560.dp)
+    // タグ管理中は検索・絞り込み・アプリ一覧を描画しないため、TagSection だけが weight(1f) で
+    // 残り高さを使い、終了フッターは常に画面下に残る (一覧側の weight(1f) とは同時に存在しない)。
+    Box(modifier = Modifier.fillMaxSize()) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -729,13 +724,15 @@ fun AppListScreen(
             )
         }
 
-        // タグ管理UIは開いているときだけ表示。ショートカット簡素表示中は隠す。
-        // タグ数やメッセージでどれだけ内容が伸びても、下の一覧や「タグ管理を終了」を
-        // 画面外へ押し出さないよう heightIn(max=tagSectionMaxHeight) で自己完結的に上限を持たせ、
-        // 超えた分だけ内部でスクロールさせる (アプリ一覧の weight(1f) とは競合しない)。
-        if (showTagManagement && !simplified) {
+        // タグ管理は開いているときだけ表示。ショートカット簡素表示中は隠す。
+        // 管理中は検索・タグ絞り込み・アプリ一覧を隠し、残りの縦領域をすべてタグ管理に使う。
+        // 内容が伸びても「タグ管理を終了」を画面外へ押し出さないよう、TagSection は
+        // weight(1f) で残り高さに収め、超えた分だけ内部でスクロールさせる。
+        if (tagManagementVisible) {
             TagSection(
-                modifier = Modifier.heightIn(max = tagSectionMaxHeight),
+                modifier = Modifier.weight(1f),
+                reorderMode = tagReorderMode,
+                onReorderModeChange = { tagReorderMode = it },
                 state = tagState,
                 shortcutMessage = shortcutMessage,
                 onNameChange = tagViewModel::updateTagName,
@@ -810,10 +807,20 @@ fun AppListScreen(
         // 一覧の左右スワイプでも同じ前/次遷移を行う。◀▶と同じ条件に加え、
         // タグ編集 (一括選択) 中は誤操作を避けるため無効にする。
         val tagSwipeEnabled = singleTagNavEnabled && !tagEditMode
+        // タグ管理を開いている間は管理専用画面にする (検索・絞り込み・一覧は隠す)。
+        val managingTags = tagManagementVisible
+        BackHandler(enabled = managingTags) {
+            when {
+                tagReorderMode -> tagReorderMode = false
+                tagState.editingTag != null -> tagViewModel.cancelRenameTag()
+                tagState.editingUntagged -> tagViewModel.cancelEditUntaggedLabel()
+                else -> showTagManagement = false
+            }
+        }
 
         // 検索欄はアプリが読み込まれているときだけ表示する。
         // 単一タグ選択中は検索欄を少し短くし、左側に前/次タグの ◀▶ ボタンを出す。
-        if (uiState.apps.isNotEmpty()) {
+        if (uiState.apps.isNotEmpty() && !managingTags) {
             // 検索BOX直下の見た目の余白を、次セクションがタグ行でも操作行でも約6dpに揃える。
             // タグ行あり: spacedBy 4dp + タグ行の上 2dp = 6dp。
             // タグ行なし (簡素表示など): 直後の操作行が offset(y=-6dp) で上に詰めて描画されるため、
@@ -863,7 +870,7 @@ fun AppListScreen(
         }
 
         // 絞り込みチップはタグがあり、かつショートカット簡素表示でないときだけ表示する
-        if (tagRowVisible) {
+        if (tagRowVisible && !managingTags) {
             TagFilterSection(
                 state = tagState,
                 onToggle = { tagId ->
@@ -1060,6 +1067,9 @@ fun AppListScreen(
         }
 
         when {
+            // タグ管理中はアプリ一覧側を描画しない (一覧のスクロール位置等は上位で保持される)
+            managingTags -> {}
+
             uiState.isLoading && uiState.apps.isEmpty() -> {
                 Text(
                     text = stringResource(R.string.loading_apps),
@@ -1489,7 +1499,6 @@ internal fun TagManagementExitBar(onExit: () -> Unit, modifier: Modifier = Modif
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun TagSection(
     modifier: Modifier = Modifier,
@@ -1511,7 +1520,12 @@ internal fun TagSection(
     onEditingUntaggedLabelChange: (String) -> Unit,
     onConfirmUntaggedLabel: () -> Unit,
     onCancelEditUntaggedLabel: () -> Unit,
+    // 並べ替えモード。Back 操作から抜けられるよう呼び出し元で保持する。
+    reorderMode: Boolean = false,
+    onReorderModeChange: (Boolean) -> Unit = {},
 ) {
+    // 変更・削除を入れる ⋮ メニューを開いているタグ
+    var menuTagId by remember { mutableStateOf<Long?>(null) }
     // semantics{} (非Composable) から参照する文言は、ここで stringResource() により解決しておく
     // (LocalContextGetResourceValueCall lint 対応)。
     val contentDescMoveUp = stringResource(R.string.content_desc_move_up)
@@ -1531,25 +1545,52 @@ internal fun TagSection(
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Text(
-            text = stringResource(R.string.tag_section_title),
-            style = MaterialTheme.typography.titleSmall,
-        )
+        // タイトル行の右端に並べ替えモードの切替を置く。名前変更の入力中は入力値を守るため無効にする。
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            OutlinedTextField(
-                value = state.tagName,
-                onValueChange = onNameChange,
-                singleLine = true,
-                label = { Text(stringResource(R.string.new_tag_name_hint)) },
+            Text(
+                text = stringResource(R.string.tag_section_title),
+                style = MaterialTheme.typography.titleSmall,
                 modifier = Modifier.weight(1f),
             )
-            Button(onClick = onCreate) {
-                Text(stringResource(R.string.add_tag_button))
+            TextButton(
+                onClick = { onReorderModeChange(!reorderMode) },
+                enabled = reorderMode ||
+                    (state.tags.size > 1 && state.editingTag == null && !state.editingUntagged),
+            ) {
+                Text(
+                    stringResource(
+                        if (reorderMode) R.string.tag_reorder_done else R.string.tag_reorder_start,
+                    ),
+                )
             }
+        }
+        if (!reorderMode) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedTextField(
+                    value = state.tagName,
+                    onValueChange = onNameChange,
+                    singleLine = true,
+                    label = { Text(stringResource(R.string.new_tag_name_hint)) },
+                    modifier = Modifier.weight(1f),
+                )
+                Button(onClick = onCreate) {
+                    Text(stringResource(R.string.add_tag_button))
+                }
+            }
+        } else {
+            Text(
+                text = stringResource(R.string.tag_reorder_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
         state.message?.let { msg ->
             Text(
@@ -1559,18 +1600,20 @@ internal fun TagSection(
             )
         }
         // 「タグなし」で開くショートカットをホームに追加する導線
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Text(
-                text = stringResource(R.string.add_to_home_label),
-                style = MaterialTheme.typography.labelMedium,
-                modifier = Modifier.weight(1f),
-            )
-            TextButton(onClick = onPinUntagged) {
-                Text(stringResource(R.string.add_untagged_shortcut_button))
+        if (!reorderMode) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    text = stringResource(R.string.add_to_home_label),
+                    style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = onPinUntagged) {
+                    Text(stringResource(R.string.add_untagged_shortcut_button))
+                }
             }
         }
         shortcutMessage?.let { msg ->
@@ -1625,8 +1668,10 @@ internal fun TagSection(
                         )
                     }
                 }
-                TextButton(onClick = onStartEditUntagged) {
-                    Text(stringResource(R.string.action_rename))
+                if (!reorderMode) {
+                    TextButton(onClick = onStartEditUntagged) {
+                        Text(stringResource(R.string.action_rename))
+                    }
                 }
             }
         }
@@ -1677,13 +1722,25 @@ internal fun TagSection(
                         }
                     }
                 } else {
-                    // タグ名・表示名は1段目に全幅で置き、操作ボタンは2段目へ分ける。
-                    // 1行に並べると狭い画面やフォント拡大時にタグ名が1文字ずつ折り返されるため (Issue #2)。
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        Column(modifier = Modifier.fillMaxWidth()) {
+                    // 1段のコンパクト行 (行高 56dp 以上)。操作ボタンにタグ名の幅を奪わせないため、
+                    // 通常時の常時表示は「Home」と「⋮」(変更・削除) の2つだけにし、
+                    // ▲▼ は並べ替えモードでのみ表示する (Issue #2)。
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 56.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(vertical = 6.dp),
+                        ) {
                             Text(
                                 text = "# ${tag.name}",
                                 style = MaterialTheme.typography.bodyMedium,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
                             )
                             // 表示名が設定されているタグだけ、チップでの見え方を補助表示する
                             tag.displayLabel?.takeIf { it.isNotBlank() }?.let { label ->
@@ -1691,21 +1748,18 @@ internal fun TagSection(
                                     text = stringResource(R.string.display_label_format, label),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
                                 )
                             }
                         }
-                        FlowRow(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(0.dp, Alignment.End),
-                            verticalArrangement = Arrangement.Center,
-                            itemVerticalAlignment = Alignment.CenterVertically,
-                        ) {
+                        if (reorderMode) {
                             // ▲▼ で表示順を1つずつ移動する。先頭の▲・末尾の▼は無効。
                             IconButton(
                                 onClick = { onMoveUp(tag) },
                                 enabled = index > 0,
                                 modifier = Modifier
-                                    .size(32.dp)
+                                    .size(48.dp)
                                     .semantics { contentDescription = contentDescMoveUp },
                             ) {
                                 Text("▲", style = MaterialTheme.typography.labelLarge)
@@ -1714,20 +1768,47 @@ internal fun TagSection(
                                 onClick = { onMoveDown(tag) },
                                 enabled = index < state.tags.lastIndex,
                                 modifier = Modifier
-                                    .size(32.dp)
+                                    .size(48.dp)
                                     .semantics { contentDescription = contentDescMoveDown },
                             ) {
                                 Text("▼", style = MaterialTheme.typography.labelLarge)
                             }
-                            // 控えめなテキストボタン。誤操作を避けるため小さめに留める
+                        } else {
                             TextButton(onClick = { onPinTag(tag) }) {
                                 Text(stringResource(R.string.pin_tag_to_home_button))
                             }
-                            TextButton(onClick = { onStartRename(tag) }) {
-                                Text(stringResource(R.string.action_rename))
-                            }
-                            TextButton(onClick = { onDelete(tag) }) {
-                                Text(stringResource(R.string.action_delete))
+                            val actionsDesc = stringResource(
+                                R.string.content_desc_tag_actions_format,
+                                tag.name,
+                            )
+                            Box {
+                                IconButton(
+                                    onClick = { menuTagId = tag.tagId },
+                                    modifier = Modifier
+                                        .size(48.dp)
+                                        .semantics { contentDescription = actionsDesc },
+                                ) {
+                                    TopActionOverflowDots()
+                                }
+                                DropdownMenu(
+                                    expanded = menuTagId == tag.tagId,
+                                    onDismissRequest = { menuTagId = null },
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.action_rename)) },
+                                        onClick = {
+                                            menuTagId = null
+                                            onStartRename(tag)
+                                        },
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.action_delete)) },
+                                        onClick = {
+                                            menuTagId = null
+                                            onDelete(tag)
+                                        },
+                                    )
+                                }
                             }
                         }
                     }
