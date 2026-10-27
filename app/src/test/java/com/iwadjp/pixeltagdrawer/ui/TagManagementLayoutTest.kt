@@ -10,6 +10,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.getBoundsInRoot
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.onAllNodesWithContentDescription
@@ -20,6 +21,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.onAllNodesWithText
@@ -271,15 +273,118 @@ class TagManagementLayoutTest {
         assert(home1.top < name1.bottom) { "Home is not on the name row: home=$home1 name=$name1" }
         assert(more1.top < name1.bottom) { "more menu is not on the name row: more=$more1 name=$name1" }
         assert(home1.left >= name1.right && more1.left >= home1.right) { "order broken: $name1 $home1 $more1" }
-        // 1行の高さは 56dp 前後 (固定高ではなく最小 56dp。短い名前なら伸びない)
+        // 1行は 48〜52dp (下限 48dp、行間 0。短い名前なら伸びない)
         val pitch = name2.top - name1.top
-        assert(pitch.value in 56f..64f) { "row pitch $pitch is not about 56dp" }
+        assert(pitch.value in 48f..52f) { "row pitch $pitch is not 48..52dp" }
         // ⋮ のタップ領域は 48dp 以上
         assert((more1.right - more1.left).value >= 48f && (more1.bottom - more1.top).value >= 48f)
         // 通常時は ▲▼・変更・削除を常時表示しない
         composeRule.onAllNodesWithContentDescription(ctx.getString(R.string.content_desc_move_up)).assertCountEquals(0)
         composeRule.onAllNodesWithContentDescription(ctx.getString(R.string.content_desc_move_down)).assertCountEquals(0)
         composeRule.onNodeWithText(delete()).assertDoesNotExist()
+    }
+
+    // 行の実測。Robolectric の既定 (mdpi) では 1dp = 1px のため寸法は dp としてそのまま読める。
+    // 画面外にスクロールされる行もあるため、行の寸法はクリップ前の値 (getUnclippedBoundsInRoot) で測る。
+    // 限界: Robolectric のテキスト計測は実機のフォントと異なり (幅は1文字≒1px程度)、
+    // 「長い名前が実際に何行に折り返すか」は再現できない。ここで確認できるのは、
+    // レイアウトの下限・間隔・タップ領域・重なり・はみ出しであり、折り返しの見た目は実機で確認する。
+    private fun rowBounds(id: Long) =
+        composeRule.onNodeWithTag("tag-row-$id").getUnclippedBoundsInRoot()
+
+    private fun assertRowMetrics(widthDp: Int, fontScale: Float, reorder: Boolean) {
+        val count = 5
+        setSection(
+            TagUiState(tags = tags(count)),
+            widthDp = widthDp,
+            fontScale = fontScale,
+            startInReorder = reorder,
+        )
+        val label = "widthDp=$widthDp fontScale=$fontScale reorder=$reorder"
+        val rows = (1..count).map { rowBounds(it.toLong()) }
+        rows.forEachIndexed { i, r ->
+            val h = (r.bottom - r.top).value
+            assert(h >= 48f) { "row ${i + 1} is shorter than 48dp ($label): $h" }
+            if (fontScale == 1f) assert(h <= 52f) { "row ${i + 1} is taller than 52dp at 1.0x ($label): $h" }
+            assert(r.right.value <= widthDp) { "row ${i + 1} overflows ($label): $r" }
+        }
+        for (i in 0 until count - 1) {
+            val gap = (rows[i + 1].top - rows[i].bottom).value
+            // 行間は 0〜4dp。負なら行が重なっている (タップ領域の重なり)。
+            assert(gap in 0f..4f) { "gap between rows ${i + 1} and ${i + 2} is $gap ($label)" }
+        }
+        // タップ領域: Home・⋮ (通常) / ▲▼ (並べ替え) はすべて 48dp 以上で、行の外へはみ出さない。
+        val targets = if (reorder) {
+            listOf(
+                composeRule.onAllNodesWithContentDescription(ctx.getString(R.string.content_desc_move_up))[0],
+                composeRule.onAllNodesWithContentDescription(ctx.getString(R.string.content_desc_move_down))[0],
+            )
+        } else {
+            listOf(
+                composeRule.onAllNodesWithText(home())[0],
+                composeRule.onNodeWithContentDescription(moreActions("タグ1")),
+            )
+        }
+        // 実効タップ領域 (touchBoundsInRoot) で測る。Material のボタンは見た目が 40dp でも、
+        // 48dp のタップ領域を確保する。mdpi の Robolectric では 1px = 1dp。
+        fun touch(node: androidx.compose.ui.test.SemanticsNodeInteraction) =
+            node.fetchSemanticsNode().touchBoundsInRoot
+        val touches = targets.map { touch(it) }
+        touches.forEach { b ->
+            assert(b.width >= 48f && b.height >= 48f) { "tap target smaller than 48dp ($label): $b" }
+            assert(b.right <= widthDp) { "target overflows ($label): $b" }
+        }
+        // タップ領域は行の上下にはみ出さない (隣の行のタップ領域と重ならない)
+        touches.forEach { b ->
+            assert(b.top >= rows[0].top.value - 0.5f && b.bottom <= rows[0].bottom.value + 0.5f) {
+                "target leaves its row ($label): $b ${rows[0]}"
+            }
+        }
+        // 隣り合うタップ領域どうしは重ならない
+        assert(touches[1].left >= touches[0].right - 0.5f) { "adjacent tap targets overlap ($label): $touches" }
+    }
+
+    @Test fun `normal rows 320dp 1x`() = assertRowMetrics(320, 1f, false)
+    @Test fun `normal rows 320dp 1_5x`() = assertRowMetrics(320, 1.5f, false)
+    @Test fun `normal rows 320dp 2x`() = assertRowMetrics(320, 2f, false)
+    @Test fun `normal rows 360dp 1x`() = assertRowMetrics(360, 1f, false)
+    @Test fun `normal rows 360dp 1_5x`() = assertRowMetrics(360, 1.5f, false)
+    @Test fun `normal rows 360dp 2x`() = assertRowMetrics(360, 2f, false)
+    @Test fun `reorder rows 320dp 1x`() = assertRowMetrics(320, 1f, true)
+    @Test fun `reorder rows 320dp 2x`() = assertRowMetrics(320, 2f, true)
+    @Test fun `reorder rows 360dp 1x`() = assertRowMetrics(360, 1f, true)
+    @Test fun `reorder rows 360dp 1_5x`() = assertRowMetrics(360, 1.5f, true)
+
+    @Test
+    fun `seventeen tags take about 48dp each and the last one is reachable by scrolling`() {
+        setSection(TagUiState(tags = tags(17)))
+
+        val first = rowBounds(1L)
+        val last = rowBounds(17L)
+        val span = (last.bottom - first.top).value
+        assert(span in (17 * 48f)..(17 * 52f)) { "17 rows span $span dp, expected 816..884" }
+        composeRule.onNodeWithText("# タグ17").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun `long Japanese and English names keep Home and the more menu reachable without overlap`() {
+        val list = listOf(
+            TagEntity(tagId = 1L, name = "金融・家計簿・ポイントカード管理と資産運用の記録用タグ", sortOrder = 1),
+            TagEntity(tagId = 2L, name = "A-very-long-english-tag-name-without-any-spaces-for-wrapping", sortOrder = 2),
+            TagEntity(tagId = 3L, name = "タグ3", sortOrder = 3),
+        )
+        setSection(TagUiState(tags = list), widthDp = 320, fontScale = 1.5f)
+
+        val rows = (1..3).map { rowBounds(it.toLong()) }
+        for (i in 0 until 2) {
+            assert(rows[i + 1].top >= rows[i].bottom) { "rows ${i + 1} and ${i + 2} overlap: ${rows[i]} ${rows[i + 1]}" }
+        }
+        for (i in 0 until 3) {
+            assert((rows[i].bottom - rows[i].top).value >= 48f)
+            val home = composeRule.onAllNodesWithText(home())[i].performScrollTo().assertIsDisplayed()
+            assert(home.getBoundsInRoot().right.value <= 320f)
+        }
+        composeRule.onNodeWithContentDescription(moreActions(list[0].name)).performScrollTo().assertIsDisplayed()
     }
 
     @Test

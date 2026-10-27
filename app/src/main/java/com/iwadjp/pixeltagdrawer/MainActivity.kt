@@ -35,6 +35,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -99,6 +100,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalContext
@@ -1685,8 +1689,9 @@ internal fun TagSection(
             // タグ一覧自体には個別のスクロール/高さ上限を持たせない。TagSection 全体
             // (呼び出し元で heightIn(max=...) + このファイル内の verticalScroll) の
             // 1つのスクロール領域にまとめて任せる。
+            // 行どうしの間隔は 0。各行が 48dp のタップ領域を持つため、行間は不要 (区切りは細線で示す)。
             Column(
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+                verticalArrangement = Arrangement.spacedBy(0.dp),
             ) {
             state.tags.forEachIndexed { index, tag ->
                 if (state.editingTag?.tagId == tag.tagId) {
@@ -1722,19 +1727,34 @@ internal fun TagSection(
                         }
                     }
                 } else {
-                    // 1段のコンパクト行 (行高 56dp 以上)。操作ボタンにタグ名の幅を奪わせないため、
+                    // 1段のコンパクト行 (行高 48dp 以上)。操作ボタンにタグ名の幅を奪わせないため、
                     // 通常時の常時表示は「Home」と「⋮」(変更・削除) の2つだけにし、
                     // ▲▼ は並べ替えモードでのみ表示する (Issue #2)。
+                    // 行高は内容で決まる: 下限 48dp (Home・⋮・▲▼ のタップ領域と同じ)、
+                    // 名前が複数行・フォント拡大のときだけ伸びる。区切り線は高さを取らない描画のみ。
+                    val dividerColor = MaterialTheme.colorScheme.outlineVariant
+                    val isLastTag = index == state.tags.lastIndex
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(min = 56.dp),
+                            .testTag("tag-row-${tag.tagId}")
+                            .heightIn(min = 48.dp)
+                            .drawBehind {
+                                if (!isLastTag) {
+                                    val h = 1.dp.toPx()
+                                    drawRect(
+                                        color = dividerColor,
+                                        topLeft = Offset(0f, size.height - h),
+                                        size = Size(size.width, h),
+                                    )
+                                }
+                            },
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Column(
                             modifier = Modifier
                                 .weight(1f)
-                                .padding(vertical = 6.dp),
+                                .padding(vertical = 4.dp),
                         ) {
                             Text(
                                 text = "# ${tag.name}",
@@ -1774,7 +1794,12 @@ internal fun TagSection(
                                 Text("▼", style = MaterialTheme.typography.labelLarge)
                             }
                         } else {
-                            TextButton(onClick = { onPinTag(tag) }) {
+                            // 縦の内部余白は 0 にする (既定の 8dp×2 が行高を押し上げるため)。
+                            // タップ領域は TextButton の最小サイズ (48dp) がそのまま保証する。
+                            TextButton(
+                                onClick = { onPinTag(tag) },
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                            ) {
                                 Text(stringResource(R.string.pin_tag_to_home_button))
                             }
                             val actionsDesc = stringResource(
