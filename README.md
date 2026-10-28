@@ -84,8 +84,8 @@ It is not distributed through Google Play.
 
 ### GitHub Release (APK)
 
-1. Open the [v0.1.6 release](https://github.com/iwadjp/pixel-tag-drawer/releases/tag/v0.1.6)
-2. Download `pixel-tag-drawer-v0.1.6-android.apk` from Assets
+1. Open the [v0.1.7 release](https://github.com/iwadjp/pixel-tag-drawer/releases/tag/v0.1.7)
+2. Download `pixel-tag-drawer-v0.1.7-android.apk` from Assets
 3. Tap the downloaded APK to install it
 
 Android may ask you to allow installing apps from this source. Google Play Protect or Android may also show a

@@ -1,0 +1,1 @@
+Tag management is now a compact, dedicated screen. Each tag is a single row with Home and a menu (Change / Delete), reordering has its own mode, and tag names no longer wrap one character per line on narrow screens or with large fonts. The tag highlight also follows horizontal swipes right away.

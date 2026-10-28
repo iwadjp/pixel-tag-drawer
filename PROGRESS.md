@@ -4,6 +4,18 @@ pixel-tag-drawer の公開用進捗ログ。実機確認やマイルストーン
 
 ---
 
+## 2026-10-28 Issue #2: tag management redesign - Human acceptance / v0.1.7 release preparation
+
+- Issue #2 (external report on v0.1.6): in the tag management screen, tag names wrapped one character per line because the five action controls shared a single row with the name, leaving the name almost no width on narrow screens or with large fonts.
+- Step 1 `e9400e8`: stacked the name above a right-aligned control row. It fixed the wrapping but made each tag roughly 76dp tall and left the app search, filter chips and list on screen, so only a few tags fit.
+- Step 2 `0374799` (adopted a Claude Design proposal, option C): tag management became a dedicated screen (no app search, filter chips or app list while open). Each tag is a single row with the name on the left and only Home and a more (⋮) menu (Change / Delete) on the right. Reordering moved to its own mode with up/down buttons. Back leaves reorder mode, then cancels a name edit, then closes the screen. Delete keeps its existing no-confirmation behavior.
+- Step 3 `74bb43b`: tag rows were 56dp plus a 4dp gap (60dp pitch) while their content floor is 48dp. Row minimum is now 48dp, the gap is 0 (a 1dp hairline separates rows), and the Home button's inner vertical padding was removed. Tap targets stay at 48dp. Measured in Robolectric and on an emulator: 60dp -> 48dp per tag.
+- Verification: 165 unit tests PASS (0 failures/errors/skips) and lint PASS. New layout tests cover row height, row gap, 48dp tap targets (Home, more menu, up/down), 320dp/360dp x font scale 1.0/1.5/2.0, long Japanese and English names, 17 tags with scrolling, reorder mode, and returning to the app list. Robolectric text metrics differ from a device, so wrapping appearance was checked on the emulator and the device instead.
+- Device: Release APK (v0.1.6 / code 7, same signing certificate) installed over the existing app via SafeDrop on Pixel 10a; Human acceptance **PASS**, existing data kept.
+- Release target: commits up to `74bb43b`, which also include the earlier accepted flip-selection sync fix `04d5074`. Version bumped to 0.1.7 / code 8 in the release commit.
+
+---
+
 ## 2026-10-09 Horizontal flip selection sync - Human acceptance
 
 - Feedback: on the tag selection screen, a horizontal flip switched the displayed tag but the selection highlight followed a beat later.
