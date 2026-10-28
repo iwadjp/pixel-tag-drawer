@@ -4,6 +4,19 @@ pixel-tag-drawer の公開用進捗ログ。実機確認やマイルストーン
 
 ---
 
+## 2026-10-28 v0.1.7 published
+
+- Release commit/tag: `626d2294686e8f8c80b9d49a3beea925be750a9a` / `v0.1.7` (annotated); master and the tag were pushed without force. This publication record is a separate documentation commit; the tag stays on the accepted source commit.
+- Public Release: https://github.com/iwadjp/pixel-tag-drawer/releases/tag/v0.1.7 (stable, latest). Contents: Issue #2 tag management redesign (dedicated screen, single 48dp rows, Home + more menu, Reorder mode, no more one-character-per-line names) and the accepted flip-selection sync fix.
+- Asset: `pixel-tag-drawer-v0.1.7-android.apk`; fresh clean build from the tag commit, package `com.iwadjp.pixeltagdrawer`, version 0.1.7/code 8; existing release certificate `3cae2b8c341174c92a91934b4689527f2ac680150644d2d79bc312c71e1894df`, V2/V3 verified, zipalign verified, not debuggable.
+- Public asset SHA-256: `CCAC27CC952EAD2866063E482ABBDA7EF18DBB830BF029577E5744994A222FB9` (8,437,635 bytes). Anonymous download HTTP 200; downloaded bytes/hash/package/version/signature verified against the staged APK.
+- Reproducibility: a second clean build of the same commit in a different directory produced a byte-identical unsigned APK (SHA-256 `69F5E75E394073CE70A24873024E004204A19E11DB98787D9865C8B9E66E9B70`). The full apksigcopier signature-copy check was not re-run for this release.
+- Tests before release: 165 unit tests PASS, lint PASS.
+- Issue #2: English reply posted with the release link and the issue closed as completed after the Release was confirmed live.
+- F-Droid (read-only check, no manual MR/metadata change): metadata has `AutoUpdateMode: Version` / `UpdateCheckMode: Tags`, `CurrentVersion` 0.1.6 / code 7, and f-droid.org currently lists 0.1.6 as the latest. Detection, build and listing of 0.1.7 are not yet verified; GitHub publication does not mean F-Droid publication.
+
+---
+
 ## 2026-10-28 Issue #2: tag management redesign - Human acceptance / v0.1.7 release preparation
 
 - Issue #2 (external report on v0.1.6): in the tag management screen, tag names wrapped one character per line because the five action controls shared a single row with the name, leaving the name almost no width on narrow screens or with large fonts.
